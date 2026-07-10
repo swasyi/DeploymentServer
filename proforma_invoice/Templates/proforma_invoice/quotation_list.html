@@ -1,0 +1,427 @@
+{% extends "proforma_invoice/base.html" %}
+{% load quotation_extras %}
+{% block content %}
+
+<style>
+    /* --- CSS VARIABLES & ROOT (Synchronized with PI List) --- */
+    :root {
+        --primary: #ffc107;
+        --dark: #212529;
+        --blue: #0d6efd;
+        --info: #17a2b8;
+        --success: #27ae60;
+        --danger: #e74c3c;
+        --grey: #6c757d;
+        --light-bg: #f8f9fa;
+        --border: #eee;
+    }
+
+    /* --- PROFESSIONAL ACTION BUTTONS --- */
+    .btn-pro-action {
+        display: inline-flex; align-items: center; justify-content: center;
+        padding: 8px 16px; border-radius: 8px; font-size: 0.75rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.5px; text-decoration: none !important;
+        border: none; cursor: pointer; transition: all 0.2s ease;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); margin-bottom: 5px; width: 100%;
+        color: white !important;
+    }
+    .btn-pro-action:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15); filter: brightness(1.1); }
+    .btn-yellow { background: var(--primary); color: #000 !important; }
+    .btn-dark   { background: var(--dark); }
+    .btn-blue   { background: var(--blue); }
+    .btn-grey   { background: var(--grey); cursor: not-allowed; opacity: 0.7; }
+
+    /* --- APPROVAL JOURNEY (TRAIN UI) --- */
+    .approval-tracker {
+        display: flex; align-items: center; justify-content: center;
+        margin-bottom: 12px; background: var(--light-bg); padding: 12px 8px;
+        border-radius: 10px; border: 1px solid var(--border); width: 100%;
+    }
+    .station { display: flex; flex-direction: column; align-items: center; font-size: 9px; font-weight: 800; color: #ccc; width: 75px; }
+    .station .icon { font-size: 16px; margin-bottom: 2px; filter: grayscale(1); transition: all 0.3s; }
+    .station.active { color: var(--primary); }
+    .station.active .icon { filter: grayscale(0); transform: scale(1.1); }
+    .station.completed { color: var(--success); }
+    .station.completed .icon { filter: grayscale(0); }
+    .station.rejected { color: var(--danger); }
+    .station.rejected .icon { filter: grayscale(0); }
+    .connector { height: 3px; width: 30px; background: var(--border); margin-top: -22px; position: relative; }
+    .connector.done { background: var(--success); }
+
+    /* --- NOTIFICATION HUB --- */
+    .notification-dot {
+        position: absolute; top: -4px; right: -4px; width: 12px; height: 12px;
+        background-color: #ff4d4d; border: 2px solid white; border-radius: 50%;
+        box-shadow: 0 0 5px rgba(255, 77, 77, 0.8); animation: pulse-dot 1.5s infinite;
+    }
+    @keyframes pulse-dot {
+        0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 77, 77, 0.7); }
+        70% { transform: scale(1.2); box-shadow: 0 0 0 6px rgba(255, 77, 77, 0); }
+        100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 77, 77, 0); }
+    }
+
+    /* --- CHAT BUBBLES --- */
+    .bubble { padding: 10px 14px; border-radius: 12px; font-size: 13px; color: #fff; line-height: 1.4; max-width: 85%; margin-bottom: 4px; }
+    .b-sales { background: #1e3a8a; border-left: 4px solid #3b82f6; align-self: flex-start; }
+    .b-accounts { background: #064e3b; border-left: 4px solid #10b981; align-self: flex-start; }
+    .b-admin { background: #450a0a; border-left: 4px solid #ef4444; align-self: flex-start; }
+    .rtag { font-size: 9px; font-weight: 900; text-transform: uppercase; margin-bottom: 4px; display: block; letter-spacing: 0.5px; }
+
+    /* --- MODALS --- */
+    .custom-overlay, .modal-custom-overlay {
+        display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.85); z-index: 9999; align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-custom-content { background: #1e1e1e; color: white; width: 90%; max-width: 650px; border-radius: 12px; overflow: hidden; border: 1px solid #444; }
+    .rej-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .rej-table th, .rej-table td { padding: 10px; border-bottom: 1px solid #333; font-size: 0.85rem; text-align: center; }
+
+    .action-container { display: flex; flex-direction: column; gap: 8px; align-items: center; min-width: 180px; padding: 10px !important; }
+    .table-container { background: #fff; border-radius: 12px; }
+</style>
+
+<div class="container py-4">
+    <div class="table-container bg-white p-4 shadow-sm rounded">
+        <h1 class="mb-4">Quotation Maker</h1>
+
+        <div class="top-actions mb-3">
+            <a href="{% url 'home' %}" class="btn btn-sm btn-outline-dark">Home</a>
+            <a href="{% url 'create_proforma' %}" class="btn btn-sm btn-dark">+ Create Proforma</a>
+            <a href="{% url 'quotation_create' %}" class="btn btn-sm btn-dark">+ Create Quotation</a>
+        </div>
+
+        <!-- ---------------- FILTER BAR ---------------- -->
+        <form method="get" class="filters mb-4 d-flex flex-wrap gap-2">
+            <select name="customer" class="form-control w-auto">
+                <option value="">Customer</option>
+                {% for c in customers %}<option value="{{ c.customer__id }}" {% if request.GET.customer == c.customer__id|stringformat:"s" %}selected{% endif %}>{{ c.customer__name }}</option>{% endfor %}
+            </select>
+            <input type="date" name="start_date" class="form-control w-auto" value="{{ request.GET.start_date }}">
+            <button type="submit" class="btn btn-primary btn-sm px-4">Apply</button>
+        </form>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Customer / Created By</th>
+                        <th>Date</th>
+                        <th>Grand Total</th>
+                        <th>Courier</th>
+                        <th>Status</th>
+                        <th>Approval Journey & Actions</th>
+                        <th>Message Hub</th>
+                    </tr>
+                </thead>
+<tbody>
+                    {% for q in quotations %}
+                    <tr>
+                        {% with all_stock=q.stock_requests.all|dictsort:"id" %}
+                        {% with all_prices=q.price_requests.all|dictsort:"id" %}
+                        {% with last_stock=all_stock|last %}
+                        {% with last_price=all_prices|last %}
+
+                        <!-- 1. ID -->
+                        <td>#{{ q.id }}</td>
+
+                        <!-- 2. Customer / Created By -->
+                        <td>
+                            <div class="fw-bold">{{ q.customer.name }}</div>
+                            <small class="text-muted">By: {{ q.created_by }}</small>
+                        </td>
+
+                        <!-- 3. Date -->
+                        <td>{{ q.date_created|date:"d M Y" }}</td>
+
+                        <!-- 4. Grand Total -->
+                        <td class="fw-bold">₹{{ q.grand_total|floatformat:2 }}</td>
+
+                        <!-- 5. Courier -->
+                        <td><small>{{ q.get_courier_mode_display }}</small></td>
+
+                        <!-- 6. STATUS & VIEW PERMISSIONS -->
+<!-- 5. STATUS & VIEW PERMISSIONS -->
+<td>
+    {% if request.user.is_superuser %}
+        <a href="{% url 'proforma_detail' inv.id %}" class="btn-pro-action btn-dark" target="_blank">Admin View</a>
+    {% else %}
+
+        {# MASTER LOCK 1: CREDIT OVERDUE (Check this first) #}
+        {% if credit_status == 'pending' %}
+            <div class="badge bg-danger text-white w-100 p-2 mb-1" style="font-size: 0.65rem;">🚨 CREDIT PENDING</div>
+            <button type="button" class="btn-pro-action btn-grey" onclick="alert('Credit Overdue Approval is pending. Locked.');">🔒 Credit Locked</button>
+
+        {# MASTER LOCK 2: STOCK PENDING (Lock while warehouse is reviewing) #}
+        {% elif q.has_pending_stock %}
+            <div class="badge bg-warning text-dark w-100 p-2 mb-1" style="font-size: 0.65rem;">⏳ STOCK REVIEW</div>
+            <button type="button" class="btn-pro-action btn-grey" onclick="alert('Warehouse is still reviewing stock shortages. Locked.');">🔒 Reviewing Stock...</button>
+
+        {# UNLOCKED FLOW: Stock review is finished (Approved or Rejected) #}
+        {% else %}
+
+            {# CASE: DISPATCHED #}
+            {% if inv.dispatch_status == 'dispatched' %}
+                <div class="badge bg-success text-white w-100 p-2 mb-1" style="font-size: 0.65rem;">✅ DISPATCHED</div>
+                <a href="{% url 'quotation_detail' q.id %}" class="btn-pro-action btn-blue" target="_blank">👁️ View Final Quote</a>
+
+            {# CASE: STOCK IS REVIEWED BUT PRICE IS STILL PENDING #}
+            {% elif price_status == 'pending' %}
+                <div class="badge bg-info text-white w-100 p-2 mb-1" style="font-size: 0.65rem;">⏳ PRICE PENDING</div>
+                <a href="{% url 'quotation_detail' q.id %}" class="btn-pro-action btn-blue" target="_blank">👁️ View Draft Quote</a>
+
+            {# CASE: EVERYTHING REVIEWED #}
+            {% else %}
+                <div class="badge bg-primary text-white w-100 p-2 mb-1" style="font-size: 0.65rem;">READY</div>
+                <a href="{% url 'quotation_detail' q.id %}" class="btn-pro-action btn-dark" target="_blank">👁️ View Quotation</a>
+            {% endif %}
+
+        {% endif %}
+    {% endif %}
+
+    {# Track Progress (Always available) #}
+    <button type="button" class="btn-pro-action btn-light border w-100 mt-1" style="font-size: 0.65rem;" onclick="openTrackingModal('{{ q.id }}')">
+        📊 Track Progress
+    </button>
+</td>
+                        <!-- 7. APPROVAL JOURNEY & ACTIONS -->
+                        <td class="action-container">
+                            <div class="approval-tracker mb-1">
+                                <!-- Station 1: Stock -->
+                                <div class="station {% if last_stock.status == 'pending' %}active{% elif all_stock %}{% if last_stock.status == 'rejected' %}rejected{% else %}completed{% endif %}{% endif %}">
+                                    <span class="icon">📦</span><span>Stock</span>
+                                    {% if all_stock %}
+                                        <small class="d-block" style="font-size: 8px; font-weight: bold; color: #555;">
+                                            {% if last_stock.status == 'pending' %}⌛ {{ last_stock.created_at|timesince }}{% else %}✔{% endif %}
+                                        </small>
+                                    {% endif %}
+                                </div>
+                                <div class="connector {% if all_stock and last_stock.status != 'pending' %}done{% endif %}"></div>
+
+                                <!-- Station 2: Price -->
+                                <div class="station {% if last_price.status == 'pending' %}active{% elif all_prices %}{% if last_price.status == 'rejected' %}rejected{% else %}completed{% endif %}{% endif %}">
+                                    <span class="icon">⚖️</span><span>Price</span>
+                                    {% if all_prices %}
+                                        <small class="d-block" style="font-size: 8px; font-weight: bold; color: #555;">
+                                            {% if last_price.status == 'pending' %}⌛ {{ last_price.created_at|timesince }}{% else %}✔{% endif %}
+                                        </small>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="w-100">
+                                {% if q.is_converted_to_proforma %}
+                                    <div class="text-center p-2 border rounded bg-light w-100">
+                                        <small class="text-success fw-bold">Converted to PI</small><br>
+                                        <small style="font-size: 9px;">At: {{ q.converted_at|date:"d M, H:i" }}</small>
+                                    </div>
+                                {% else %}
+                                    {# MASTER LOCK: Disable conversion if approvals are pending #}
+                                    {% if last_stock.status == 'pending' or last_price.status == 'pending' %}
+                                        <button class="btn-pro-action btn-grey" disabled title="Approvals Required">🔒 Waiting Approvals</button>
+                                    {% else %}
+                                        <a href="{% url 'convert_to_pi' q.id %}" class="btn-pro-action btn-yellow" onclick="return confirm('Convert this Quotation to a Proforma Invoice?');">🔄 Convert to PI</a>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+
+                            {# ADDED: Price Change Request Button for Quotations #}
+                            {% if not q.is_converted_to_proforma and not request.user.is_superuser %}
+                                <a href="{% url 'proforma_price_change_request_create' q.id %}?obj_type=Quotation" class="btn-pro-action btn-info-custom mt-1">✎ Request Price Change</a>
+                            {% endif %}
+                        </td>
+
+                        <!-- 8. MESSAGE HUB -->
+                        <td>
+                            <button class="btn-pro-action btn-blue" style="position:relative;" onclick="openRemarkModal('{{ q.id }}','Quotation')">
+                                💬 Message Hub
+                                {% with last_remark=q.remarks.last %}
+                                    {% if last_remark and last_remark.user != request.user %}
+                                        <span class="notification-dot"></span>
+                                    {% endif %}
+                                {% endwith %}
+                            </button>
+                        </td>
+
+                        {% endwith %}{% endwith %}{% endwith %}{% endwith %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination (Mirroring PI List) -->
+        {% if is_paginated %}
+        <nav class="mt-4"><ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Prev</a></li>
+            {% endif %}
+            <li class="page-item active"><span class="page-link">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span></li>
+            {% if page_obj.has_next %}
+                <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a></li>
+            {% endif %}
+        </ul></nav>
+        {% endif %}
+    </div>
+</div>
+
+<!-- MODAL: REMARKS / MESSAGE HUB -->
+<div id="globalRemarkModal" class="custom-overlay">
+    <div style="background:#1e1e1e; width:100%; max-width:450px; padding:20px; border-radius:12px; border:1px solid #444; color: #fff;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom: 1px solid #333; padding-bottom: 10px;">
+            <h5 style="margin:0; color: #ffc107;">💬 Quotation Hub</h5>
+            <button onclick="closeRemarkModal()" style="background:none; border:none; color:#888; cursor:pointer; font-size:24px;">&times;</button>
+        </div>
+        <div id="modalChatHistory" style="height:320px; overflow-y:auto; background:#111; padding:15px; border-radius:8px; margin-bottom:15px; display:flex; flex-direction:column; gap:10px;"></div>
+        <input type="hidden" id="modalObjectId">
+        <input type="hidden" id="modalObjectType">
+        <textarea id="modalRemarkInput" style="width:100%; background:#2a2a2a; color:#fff; border:1px solid #444; border-radius:8px; padding:10px; resize:none;" rows="3" placeholder="Write message..."></textarea>
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:15px;">
+            <button type="button" class="btn btn-sm btn-warning fw-bold" id="sendBtn" onclick="submitGlobalRemark()">Send Message</button>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: TRACKING PROGRESS -->
+<div id="trackingModal" class="modal-custom-overlay">
+    <div class="modal-custom-content">
+        <div style="padding: 15px; background: #2d2d2d; border-bottom: 1px solid #444; display: flex; justify-content: space-between;">
+            <h5 class="m-0">Request Progress - Quotation #<span id="trackId"></span></h5>
+            <button onclick="closeTrackingModal()" style="background:none; border:none; color:white; font-size:24px; cursor:pointer;">&times;</button>
+        </div>
+        <div id="trackingBody" style="padding: 20px; max-height: 70vh; overflow-y: auto;"></div>
+    </div>
+</div>
+
+<script>
+    // Helper for badge colors
+function getStatusBadge(status) {
+    status = status.toLowerCase();
+    if (status === 'approved' || status === 'stock confirmed') return 'bg-success';
+    if (status === 'rejected' || status === 'unavailable') return 'bg-danger';
+    return 'bg-warning text-dark';
+}
+
+// MESSAGE HUB LOGIC
+function openRemarkModal(objId, objType) {
+    document.getElementById('modalObjectId').value = objId;
+    document.getElementById('modalObjectType').value = objType;
+    document.getElementById('globalRemarkModal').style.display = 'flex';
+    loadRemarks(objId, objType);
+}
+
+function closeRemarkModal() { document.getElementById('globalRemarkModal').style.display = 'none'; }
+
+function loadRemarks(objId, objType) {
+    const getUrl = "{% url 'manage_invoice_remark' 0 %}".replace('0', objId) + `?obj_type=${objType}`;
+    fetch(getUrl)
+        .then(r => r.json())
+        .then(data => {
+            const historyBox = document.getElementById('modalChatHistory');
+            historyBox.innerHTML = data.remarks.length ? "" : '<div class="text-center text-muted mt-5">No messages.</div>';
+            data.remarks.forEach(r => {
+                historyBox.innerHTML += `<div class="bubble b-${r.role}"><span class="rtag">${r.role} • ${r.time}</span><strong>${r.user}:</strong> ${r.text}</div>`;
+            });
+            historyBox.scrollTop = historyBox.scrollHeight;
+        });
+}
+
+function submitGlobalRemark() {
+    const objId = document.getElementById('modalObjectId').value;
+    const objType = document.getElementById('modalObjectType').value;
+    const text = document.getElementById('modalRemarkInput').value.trim();
+    if (!text) return;
+    const formData = new FormData();
+    formData.append('invoice_id', objId);
+    formData.append('obj_type', objType);
+    formData.append('remark', text);
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+    fetch("{% url 'manage_invoice_remark' 0 %}".replace('0', objId), { method: 'POST', body: formData })
+    .then(r => r.json()).then(() => {
+        document.getElementById('modalRemarkInput').value = "";
+        loadRemarks(objId, objType);
+    });
+}
+
+// TRACKING LOGIC
+function openTrackingModal(qId) {
+    document.getElementById('trackId').innerText = qId;
+    document.getElementById('trackingModal').style.display = 'flex';
+    const body = document.getElementById('trackingBody');
+    body.innerHTML = '<div class="text-center py-5">Fetching status details...</div>';
+
+    fetch(`/proforma/api/quotation/request-details/${qId}/`)
+    .then(r => r.json())
+    .then(data => {
+        let html = '';
+
+        // 1. STOCK SHORTAGE SECTION
+        if (data.stock_history && data.stock_history.length > 0) {
+            html += `
+            <h6 class="text-warning fw-bold mb-2">📦 Stock Shortage Requests</h6>
+            <table class="rej-table mb-4">
+                <thead>
+                    <tr style="background: #2a2a2a;">
+                        <th>Product</th>
+                        <th>Qty (Req/Avail)</th>
+                        <th>Status</th>
+                        <th>Processed In</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+            data.stock_history.forEach(s => {
+                html += `
+                    <tr>
+                        <td class="small fw-bold">${s.product_name}</td>
+                        <td>
+                            <span class="text-danger small">Req: ${s.requested_qty}</span> |
+                            <span class="text-success small">Avail: ${s.available_qty}</span>
+                        </td>
+                        <td><span class="badge ${getStatusBadge(s.status)}">${s.status}</span></td>
+                        <td class="small text-muted">${s.duration}</td>
+                    </tr>`;
+            });
+            html += `</tbody></table><hr style="border-color: #444;">`;
+        }
+
+        // 2. PRICE CHANGE SECTION
+        if (data.products && data.products.length > 0) {
+            html += `
+            <h6 class="text-info fw-bold mb-2">⚖️ Price/Courier Requests</h6>
+            <table class="rej-table">
+                <thead>
+                    <tr style="background: #2a2a2a;">
+                        <th>Item</th>
+                        <th>Requested</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+            data.products.forEach(p => {
+                html += `
+                    <tr>
+                        <td class="small fw-bold">${p.name}</td>
+                        <td class="text-primary fw-bold">₹${p.requested_price}</td>
+                        <td><span class="badge ${getStatusBadge(p.status)}">${p.status}</span></td>
+                    </tr>`;
+            });
+            html += `</tbody></table>`;
+        }
+
+        body.innerHTML = html || '<div class="alert alert-info text-center">No active requests found for this quotation.</div>';
+    })
+    .catch(err => {
+        body.innerHTML = `<div class="alert alert-danger">Error loading data. Check console.</div>`;
+    });
+}
+
+function closeTrackingModal() { document.getElementById('trackingModal').style.display = 'none'; }
+
+window.onclick = function(e) {
+    if (e.target.classList.contains('custom-overlay') || e.target.classList.contains('modal-custom-overlay')) {
+        closeRemarkModal(); closeTrackingModal();
+    }
+}
+</script>
+{% endblock %}

@@ -168,27 +168,34 @@
                         <th>Actions</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <!-- Use 'grouped_requests' from the View instead of regrouping in template -->
+<tbody>
+                    <!-- Both Quotation and Proforma requests are handled here via 'group.display_type' -->
                     {% for group in grouped_requests %}
                         {% with invoice=group.invoice requests_in_group=group.requests first_req=group.requests.0 %}
 
-                        <!-- ---------------- MAIN ROW (PER INVOICE) ---------------- -->
+                        <!-- ---------------- MAIN ROW (PER INVOICE / QUOTATION) ---------------- -->
                         <tr class="row-main">
-                            <td style="color: var(--primary); font-weight: bold;">#{{ invoice.id }}</td>
+                            <td style="color: var(--primary); font-weight: bold;">
+                                {{ group.display_type|slice:":3"|upper }} #{{ invoice.id }}
+                            </td>
                             <td>
                                 <div style="font-weight: 700;">#{{ invoice.id }}</div>
                                 <div style="font-size: 0.7rem; color: #888;">{{ invoice.customer.name }}</div>
 
-                                <div style="font-size: 0.72rem; color: #aaa; margin-top: 4px;">
-                                    📋 Includes {{ requests_in_group|length }} change request(s)
+                                <!-- TYPE BADGE -->
+                                <div style="margin-top: 4px;">
+                                    {% if group.display_type == 'Quotation' %}
+                                        <span style="font-size: 0.6rem; background: #10b981; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 900; letter-spacing: 0.5px;">QUOTATION</span>
+                                    {% else %}
+                                        <span style="font-size: 0.6rem; background: #3b82f6; color: white; padding: 2px 6px; border-radius: 4px; font-weight: 900; letter-spacing: 0.5px;">PROFORMA</span>
+                                    {% endif %}
                                 </div>
                             </td>
                             <td>
                                 {% for r in requests_in_group %}
                                     {% if not r.is_product_request and r.requested_courier_charge is not None %}
                                         <div style="margin-bottom: 2px;">
-                                            <span style="text-decoration: line-through; opacity: 0.4; font-size: 0.75rem;">₹{{ invoice.courier_charge|floatformat:0 }}</span>
+                                            <span style="text-decoration: line-through; opacity: 0.4; font-size: 0.75rem;">₹{{ r.recommended_courier_charge|floatformat:0 }}</span>
                                             <b style="color: var(--info); font-size: 0.8rem;"> → ₹{{ r.requested_courier_charge|floatformat:0 }}</b>
                                         </div>
                                     {% endif %}
@@ -196,13 +203,12 @@
                             </td>
                             <td>{{ first_req.requested_by.username }}</td>
 
-<td>
+                            <td>
                                 <!-- MSRP BADGE SECTION -->
                                 <div style="margin-bottom: 5px; text-align: center;">
-                                    {% if invoice.has_msrp_warning %}
+                                    {% if group.has_msrp_warning %}
                                         <span class="msrp-alarm">⚠️ Under MSRP </span>
                                     {% else %}
-                                        <!-- Fail-safe: Check individual requests in this group if the property above fails -->
                                         {% for r in requests_in_group %}
                                             {% if r.is_under_msrp %}
                                                 <span class="msrp-alarm">⚠️ Under MSRP </span>
@@ -226,14 +232,12 @@
                             </td>
 
                             <td>
-                                <!-- 2. DURATION: (Last Decision - Creation) -->
                                 <small style="color: {% if group.is_running %}var(--primary){% else %}#888{% endif %}; font-weight: bold;">
                                     {{ group.duration_display }} {% if group.is_running %}(Running){% endif %}
                                 </small>
                             </td>
 
                             <td>
-                                <!-- 3. REVIEWED BY: List of Unique names -->
                                 {% if group.unique_reviewers %}
                                     <div style="display: flex; flex-direction: column; gap: 2px;">
                                         {% for name in group.unique_reviewers %}
@@ -249,30 +253,34 @@
 
                             <td>
                                 <div class="btn-group">
-                                    <button class="btn-core btn-remk" onclick="openRemarkModal('{{ invoice.id }}')">
+                                    <!-- Remark button passes both ID and Type -->
+                                    <button class="btn-core btn-remk" onclick="openRemarkModal('{{ invoice.id }}', '{{ group.display_type }}')">
                                         Remark
                                         {% with last_remark=invoice.remarks.last %}
                                             {% if last_remark and last_remark.user != request.user %}
-                                                <span class="notification-dot" id="dot-{{ invoice.id }}"></span>
+                                                <span class="notification-dot" id="dot-{{ group.display_type }}-{{ invoice.id }}"></span>
                                             {% endif %}
                                         {% endwith %}
                                     </button>
-                                    <button class="btn-core btn-detl" onclick="toggleDetails('det-inv-{{ invoice.id }}')">Details</button>
-                                    {% if user.is_superuser or user.is_accountant %} <!-- Optional extra check -->
-                                    <a
-                                            href="{% if group.display_type == 'Quotation' %}{% url 'quotation_detail' group.invoice.id %}{% else %}{% url 'proforma_detail' group.invoice.id %}{% endif %}"
+
+                                    <!-- Unique ID for toggle details prevents collisions between PI #5 and QUO #5 -->
+                                    <button class="btn-core btn-detl" onclick="toggleDetails('det-{{ group.display_type }}-{{ invoice.id }}')">Details</button>
+
+                                    {% if user.is_superuser or user.is_accountant %}
+                                        <a
+                                            href="{% if group.display_type == 'Quotation' %}{% url 'quotation_detail' invoice.id %}{% else %}{% url 'proforma_detail' invoice.id %}{% endif %}"
                                             target="_blank"
                                             class="btn-core"
                                             style="background: var(--secondary); color: white; text-decoration: none;">
-                                            View {{ group.display_type }}
+                                            View
                                         </a>
-                                            {% endif %}
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
 
                         <!-- ---------------- NESTED DETAILS ROW ---------------- -->
-                        <tr id="det-inv-{{ invoice.id }}" class="expand-row">
+                        <tr id="det-{{ group.display_type }}-{{ invoice.id }}" class="expand-row">
                             <td colspan="8">
                                 <div class="nested-container">
                                     <table class="inner-table">
@@ -310,13 +318,11 @@
 
                                                 <td style="text-align: center;" id="decision-cell-{{ req.id }}">
                                                     {% if req.status == 'pending' %}
-                                                        {# IF ACCOUNTANT ALREADY SENT MAIL AND IS NOT A SUPERUSER #}
                                                         {% if req.accountant_approved and not user.is_superuser %}
                                                             <div style="color: #ffc107; font-weight: bold; font-size: 0.7rem;">
                                                                 ⏳ SENT TO ADMIN<br>FOR MSRP REVIEW
                                                             </div>
                                                         {% else %}
-                                                            {# Normal Radio Buttons for Admin or New Requests #}
                                                             <form action="{% url 'proforma_price_change_approve' req.id %}" method="post" id="ajax-form-{{ req.id }}" class="ajax-form">
                                                                 {% csrf_token %}
                                                                 <label style="font-size: 0.7rem;"><input type="radio" name="status_{{ req.id }}" value="approved" checked> Appr</label>
@@ -329,37 +335,34 @@
                                                         </span>
                                                     {% endif %}
                                                 </td>
-                                                <td style="text-align: right; opacity: 0.5;">₹{{ req.recommended_price|default:invoice.courier_charge }}</td>
-                                                <td style="text-align: right; color: var(--info); font-weight: bold;">₹{{ req.requested_price|default:req.requested_courier_charge }}</td>
+                                                <td style="text-align: right; opacity: 0.5;">
+                                                    ₹{{ req.recommended_price|default:invoice.courier_charge }}
+                                                </td>
+                                                <td style="text-align: right; color: var(--info); font-weight: bold;">
+                                                    ₹{{ req.requested_price|default:req.requested_courier_charge }}
+                                                </td>
                                                 <td style="text-align: right; {% if req.is_under_msrp %}color: var(--danger); font-weight: bold;{% endif %}">
                                                     {% if req.msrp_snapshot %}₹{{ req.msrp_snapshot }}{% else %}-{% endif %}
                                                 </td>
-                                            <td style="text-align: center;" id="action-cell-{{ req.id }}">
-                                                {% if req.status == 'pending' %}
-                                                    {% if not user.is_superuser %}
-                                                        {% if req.accountant_approved %}
-                                                            <!-- Case 1: Already Notified -->
-                                                            <button class="btn-core" style="background: #444; color: #888; cursor: not-allowed; border: 1px solid #555; width: 100px;" disabled>NOTIFIED</button>
-                                                        {% else %}
-                                                            <!-- Case 2: Check for violations to show Notify Admin -->
-                                                            {% if req.is_product_request and req.requested_price < req.msrp_snapshot or not req.is_product_request and req.requested_courier_charge < req.recommended_price|default:invoice.courier_charge|divide:2 %}
-                                                                <button type="submit" form="ajax-form-{{ req.id }}" class="btn-core" style="background: green; color: white; border: none; width: 60px; font-size: 0.6rem; font-weight: 800;">
-                                                                    NOTIFY ADMIN
-                                                                </button>
+                                                <td style="text-align: center;" id="action-cell-{{ req.id }}">
+                                                    {% if req.status == 'pending' %}
+                                                        {% if not user.is_superuser %}
+                                                            {% if req.accountant_approved %}
+                                                                <button class="btn-core" style="background: #444; color: #888; cursor: not-allowed; border: 1px solid #555; width: 100px;" disabled>NOTIFIED</button>
                                                             {% else %}
-                                                                <!-- Case 3: Safe price, standard submit -->
-                                                                <button type="submit" form="ajax-form-{{ req.id }}" class="btn-core btn-appr" style="padding: 4px 12px; font-size: 0.65rem; width: 60px;">SUBMIT</button>
+                                                                {% if req.is_product_request and req.requested_price < req.msrp_snapshot or not req.is_product_request and req.requested_courier_charge < req.recommended_price|divide:2 %}
+                                                                    <button type="submit" form="ajax-form-{{ req.id }}" class="btn-core" style="background: green; color: white; border: none; width: 60px; font-size: 0.6rem; font-weight: 800;">
+                                                                        NOTIFY ADMIN
+                                                                    </button>
+                                                                {% else %}
+                                                                    <button type="submit" form="ajax-form-{{ req.id }}" class="btn-core btn-appr" style="padding: 4px 12px; font-size: 0.65rem; width: 60px;">SUBMIT</button>
+                                                                {% endif %}
                                                             {% endif %}
-                                                        {% endif %}
-                                                    {% else %}
-                                                        <!-- Case 4: Superuser always sees Submit -->
-                                                        <form action="{% url 'proforma_price_change_approve' req.id %}" method="post" id="form-{{ req.id }}" style="display: inline;">
-                                                            {% csrf_token %}
+                                                        {% else %}
                                                             <button type="submit" form="ajax-form-{{ req.id }}" class="btn-core btn-appr" style="padding: 4px 12px; font-size: 0.65rem; width: 60px;">SUBMIT</button>
-                                                        </form>
+                                                        {% endif %}
                                                     {% endif %}
-                                                {% endif %}
-                                            </td>
+                                                </td>
                                             </tr>
                                             {% endfor %}
                                         </tbody>
@@ -370,7 +373,6 @@
                         {% endwith %}
                     {% endfor %}
                 </tbody>
-
             </table>
         </div>
     </div>
@@ -422,42 +424,51 @@
 
 
 <script>
-// --- PREVIOUS LOGIC (KEEP) ---
-function toggleDetails(id) { document.getElementById(id).classList.toggle('active'); }
+// --- CORE UI LOGIC ---
+function toggleDetails(id) {
+    document.getElementById(id).classList.toggle('active');
+}
 
 function triggerReject(reqId, invId) {
     document.getElementById('rejectForm').action = "{% url 'proforma_price_change_reject' 0 %}".replace('0', reqId);
-    document.getElementById('rejectInfo').innerHTML = "Rejecting Request for <b>Invoice #" + invId + "</b>";
+    document.getElementById('rejectInfo').innerHTML = "Rejecting Request for <b>#" + invId + "</b>";
     document.getElementById('rejectInput').value = "";
-    document.getElementById('rejectOverlay').classList.add('active'); // Changed to use .active class
+    document.getElementById('rejectOverlay').classList.add('active');
 }
 
 function closeReject() {
     document.getElementById('rejectOverlay').classList.remove('active');
 }
 
-// --- NEW UNIFIED REMARK LOGIC ---
-function openRemarkModal(invoiceId) {
-    document.getElementById('modalInvoiceId').value = invoiceId;
+// --- UNIFIED REMARK LOGIC (Supports Proforma & Quotation) ---
+function openRemarkModal(parentId, parentType) {
+    // parentId is the ID of the Invoice or Quotation
+    // parentType is 'Proforma' or 'Quotation'
+    document.getElementById('modalInvoiceId').value = parentId;
+
+    // Store the type on the modal element so submitGlobalRemark can find it
+    document.getElementById('globalRemarkModal').setAttribute('data-parent-type', parentType);
+
     document.getElementById('globalRemarkModal').classList.add('active');
-    document.getElementById('modalChatHistory').innerHTML = '<div style="color:#666; text-align:center; padding-top:50px;">Loading...</div>';
-        // --- NEW: Hide the notification dot when opened ---
-    const dot = document.getElementById('dot-' + invoiceId);
+    document.getElementById('modalChatHistory').innerHTML = '<div style="color:#666; text-align:center; padding-top:50px;">Loading conversation...</div>';
+
+    // Hide the specific notification dot using the unique type-aware ID
+    const dotId = 'dot-' + parentType + '-' + parentId;
+    const dot = document.getElementById(dotId);
     if (dot) {
         dot.style.display = 'none';
     }
-    // --------------------------------------------------
 
-    loadRemarks(invoiceId);
+    loadRemarks(parentId, parentType);
 }
 
 function closeRemarkModal() {
     document.getElementById('globalRemarkModal').classList.remove('active');
 }
 
-function loadRemarks(invoiceId) {
-    // Generate the correct URL using Django's URL tag
-    const getUrl = "{% url 'manage_invoice_remark' 0 %}".replace('0', invoiceId);
+function loadRemarks(parentId, parentType) {
+    // We pass the parentType as a query parameter so the backend view knows which model to query
+    const getUrl = "{% url 'manage_invoice_remark' 0 %}".replace('0', parentId) + "?type=" + parentType;
 
     fetch(getUrl)
         .then(r => r.json())
@@ -465,37 +476,43 @@ function loadRemarks(invoiceId) {
             const historyBox = document.getElementById('modalChatHistory');
             historyBox.innerHTML = "";
 
-            if (data.remarks.length === 0) {
+            if (!data.remarks || data.remarks.length === 0) {
                 historyBox.innerHTML = '<div style="color:#444; text-align:center; padding-top:50px;">No conversation yet.</div>';
+            } else {
+                data.remarks.forEach(r => {
+                    const bClass = `b-${r.role}`;
+                    historyBox.innerHTML += `
+                        <div class="bubble ${bClass}">
+                            <span class="rtag">${r.role} • ${r.time}</span>
+                            <strong>${r.user}:</strong> ${r.text}
+                        </div>`;
+                });
             }
-
-            data.remarks.forEach(r => {
-                const bClass = `b-${r.role}`;
-                historyBox.innerHTML += `
-                    <div class="bubble ${bClass}">
-                        <span class="rtag">${r.role} • ${r.time}</span>
-                        <strong>${r.user}:</strong> ${r.text}
-                    </div>`;
-            });
             historyBox.scrollTop = historyBox.scrollHeight;
+        })
+        .catch(err => {
+            console.error("Error loading remarks:", err);
+            document.getElementById('modalChatHistory').innerHTML = '<div style="color:red; text-align:center; padding-top:50px;">Error loading history.</div>';
         });
 }
 
 function submitGlobalRemark() {
-    const invId = document.getElementById('modalInvoiceId').value;
+    const parentId = document.getElementById('modalInvoiceId').value;
+    const parentType = document.getElementById('globalRemarkModal').getAttribute('data-parent-type');
     const text = document.getElementById('modalRemarkInput').value.trim();
+
     if (!text) return;
 
     const btn = document.getElementById('sendBtn');
     btn.disabled = true;
 
     const formData = new FormData();
-    formData.append('invoice_id', invId);
+    formData.append('invoice_id', parentId); // Logic in view handles both based on type
+    formData.append('type', parentType);    // Tells backend which model to use
     formData.append('remark', text);
     formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
 
-    // Generate the correct URL using Django's URL tag
-    const postUrl = "{% url 'manage_invoice_remark' 0 %}".replace('0', invId);
+    const postUrl = "{% url 'manage_invoice_remark' 0 %}".replace('0', parentId);
 
     fetch(postUrl, {
         method: 'POST',
@@ -503,37 +520,42 @@ function submitGlobalRemark() {
         headers: {'X-Requested-With': 'XMLHttpRequest'}
     })
     .then(r => {
-        if (!r.ok) throw new Error('404 or 500 error');
+        if (!r.ok) throw new Error('Server error');
         return r.json();
     })
     .then(data => {
         if(data.status === 'ok') {
             document.getElementById('modalRemarkInput').value = "";
-            loadRemarks(invId);
+            loadRemarks(parentId, parentType);
+        } else {
+            alert("Error: " + data.message);
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert("Check if URL is correct in urls.py");
+        alert("Failed to send message. Please try again.");
     })
-    .finally(() => btn.disabled = false);
+    .finally(() => {
+        btn.disabled = false;
+    });
 }
 
-
-// Close modals when clicking outside
+// Close modals when clicking outside the box
 window.onclick = function(e) {
     const remarkModal = document.getElementById('globalRemarkModal');
     const rejectModal = document.getElementById('rejectOverlay');
     if (e.target == remarkModal) closeRemarkModal();
     if (e.target == rejectModal) closeReject();
 }
+
+// --- AJAX SUBMISSION FOR APPROVALS ---
 document.addEventListener('submit', function(e) {
     if (e.target.classList.contains('ajax-form')) {
         e.preventDefault();
         const form = e.target;
         const formData = new FormData(form);
 
-        // Correct way to get the ID from ajax-form-123
+        // Get Request ID from the form ID (ajax-form-123)
         const reqId = form.id.replace('ajax-form-', '');
 
         fetch(form.action, {
@@ -542,8 +564,6 @@ document.addEventListener('submit', function(e) {
             headers: { 'X-Requested-With': 'XMLHttpRequest' }
         })
         .then(response => {
-            // If the server redirects (302) or errors, response.json() will fail.
-            // We need to catch that.
             if (!response.ok) throw new Error('Network response was not ok');
             return response.json();
         })
@@ -564,7 +584,7 @@ document.addEventListener('submit', function(e) {
         })
         .catch(error => {
             console.error("Error:", error);
-            alert("Error: Server didn't respond correctly. Is your View updated?");
+            alert("Error: Server didn't respond correctly. Please refresh.");
         });
     }
 });

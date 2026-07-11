@@ -62,4 +62,19 @@ urlpatterns = [
 
     path('credit-bypass-requests/', views.OverdueBypassListView.as_view(), name='overdue_bypass_list'),
     path('credit-bypass-requests/<int:pk>/approve/', views.ApproveOverdueBypassView.as_view(), name='approve_overdue_bypass'),
+    # ----------------------------------
+
+    # -----Quotation Urls -----
+
+    path('quotation/create/', views.CreateQuotationMakerView.as_view(), name='quotation_create'),
+    path('quotation/<int:pk>/', views.QuotationMakerDetailView.as_view(), name='quotation_detail'),
+    path('quotations/', views.QuotationListView.as_view(), name='quotation_list'),
+    path('quotations/convert/<int:q_id>/', views.convert_quotation_to_pi, name='convert_to_pi'),
+    path('api/quotation/request-details/<int:quotation_id>/', views.QuotationRequestDetailsApiView.as_view(), name='quotation_request_details_api'),
+    # path('analytics/', views.ProformaAnalyticsDashboardView.as_view(), name='proforma_analytics'),
+    path('quotation/<int:quotation_id>/request-price/', views.ProformaPriceChangeRequestCreateView.as_view(), name='quotation_price_request'),
+
 ]
+
+
+

@@ -7,7 +7,7 @@
         max-width: 1100px; margin: 40px auto; background: #2a2a2a;
         padding: 30px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }
-    .header-section { text-align: center; margin-bottom: 30px; }
+    .header-section { text-align: center; margin-bottom: 30px; background: #2a2a2a }
     .header-section h2 { font-weight: 800; text-transform: uppercase; margin-bottom: 5px; color: #00d2ff; }
     .header-section p { color: #888; font-size: 0.9rem; }
 
@@ -65,17 +65,41 @@
 <div class="request-container">
     <div class="header-section">
         <h2>Request Price Change</h2>
-        <p>Invoice #{{ invoice.id }} | {{ invoice.customer.name }}</p>
+<!--        <p>Invoice #{{ invoice.id }} | {{ invoice.customer.name }}</p>-->
+            <p>{{ type_label }} #{{ parent.id }} | {{ parent.customer.name }}</p>
+
     </div>
 
     <form method="post">
         {% csrf_token %}
+                <!-- ADD THIS TO SEE WHY IT FAILS -->
+        {{ form.invoice }}
+        {{ form.quotation }}
+
+        {% if form.errors %}
+<!--            <div style="background: #4c1d1d; color: #f87171; padding: 15px; border-radius: 8px; margin-bottom: 20px;">-->
+<!--                <strong>Form Errors:</strong> {{ form.reason.errors.0  }}-->
+<!--            </div>-->
+            <div style="background: #4c1d1d; color: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 2px solid #f87171;">
+                <h4 style="margin-top:0">Validation Errors:</h4>
+                <ul>
+                    {% for field, errors in form.errors.items %}
+                        <li><strong>{{ field }}:</strong> {{ errors|striptags }}</li>
+                    {% endfor %}
+                    {% for error in form.non_field_errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+        {% endif %}
+
 
         <table class="custom-table">
             <thead>
                 <tr>
                     <th style="width: 25%;">Product Details</th>
-                    <th style="text-align: center;">Current PI Price</th>
+                    <th style="text-align: center;">Current {{ type_label }} Price</th>
                     <th style="text-align: center;">Qty</th>
                     <th style="text-align: center;">System Rate</th>
                     <th style="width: 250px;">Request New Price</th>
@@ -131,8 +155,13 @@
                     </td>
 
                     <td>
-                        <input type="number" step="0.01" name="new_price_{{ item.id }}" class="price-input" placeholder="0.00">
+<!--                        <input type="number" step="0.01" name="new_price_{{ item.id }}" class="price-input" placeholder="0.00">-->
+<!--                        <textarea name="reason_{{ item.id }}" rows="2" class="price-input mt-2" style="font-size: 0.75rem; font-weight: normal;" placeholder="Why change price for {{ item.product.name|truncatechars:20 }}?"></textarea>-->
+                        <!-- inside the  for item in items  loop, replace only the input line -->
+
+                        <input type="number" step="0.01" name="new_price_{{ item.id }}" class="price-input js-price-input" placeholder="No change" data-product="{{ item.product.name|escapejs }}">
                         <textarea name="reason_{{ item.id }}" rows="2" class="price-input mt-2" style="font-size: 0.75rem; font-weight: normal;" placeholder="Why change price for {{ item.product.name|truncatechars:20 }}?"></textarea>
+
                     </td>
                 </tr>
                 {% endfor %}
@@ -145,7 +174,7 @@
                 <h6>🚚 Courier Charge</h6>
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <div>
-                        <div style="font-size: 1.3rem; font-weight: 800; color: #fff;">₹{{ invoice.courier_charge|floatformat:2 }}</div>
+                        <div style="font-size: 1.3rem; font-weight: 800; color: #fff;">₹{{ parent.courier_charge|floatformat:2 }}</div>
                         <span style="font-size: 0.6rem; color: #00d2ff; text-transform: uppercase;">Current System Calculation</span>
                     </div>
                     {% if courier_status_history %}
@@ -159,19 +188,40 @@
                     {% endif %}
                 </div>
                 <label style="font-size: 0.75rem; color: #888;">Requested New Charge:</label>
-                <input type="number" step="0.01" name="new_courier_charge" class="price-input mt-1" placeholder="Enter amount">
+<!--                <input type="number" step="0.01" name="new_courier_charge" class="price-input mt-1" placeholder="Enter amount">-->
+                 <input type="number" step="0.01" name="new_courier_charge" class="price-input mt-1 js-courier-input" placeholder="No change">
+
             </div>
 
             <!-- Justification Section -->
             <div class="info-box">
                 <h6>📄 Final Justification</h6>
-                <textarea name="reason" class="price-input" rows="4" placeholder="General explanation for Admin (Optional if row remarks provided)..."></textarea>
+                {{ form.reason }}
+
+                {% if form.reason.errors %}
+
+                    <div style="color: #f87171; font-size: 0.75rem; margin-top: 5px;">
+                        {{ form.reason.errors.0 }}
+                    </div>
+                {% endif %}
+
+                <small style="color: #666; display: block; margin-top: 10px;">
+                    Provide a general explanation for the Admin regarding these changes.
+                </small>
+
+
+
+<!--                <textarea name="reason" class="price-input" rows="4" placeholder="General explanation for Admin (Optional if row remarks provided)..."></textarea>-->
             </div>
         </div>
 
-        <button type="submit" class="btn-submit">🚀 Submit Request to Admin</button>
+    <button type="submit" class="btn-submit">🚀 Submit Request to Admin</button>
         <div style="text-align: center; margin-top: 15px;">
-            <a href="{% url 'proforma_detail' invoice.id %}" style="color: #666; font-size: 0.8rem; text-decoration: none;">Cancel and Go Back</a>
+            {% if obj_type == "Quotation" %}
+                <a href="{% url 'quotation_detail' invoice.id %}" style="color: #666; font-size: 0.8rem; text-decoration: none;">Cancel and Go Back</a>
+            {% else %}
+                <a href="{% url 'proforma_detail' invoice.id %}" style="color: #666; font-size: 0.8rem; text-decoration: none;">Cancel and Go Back</a>
+            {% endif %}
         </div>
     </form>
 
@@ -221,4 +271,36 @@
     </div>
 </div>
 
+
+<!-- add just before at the end of the file -->
+<script>
+document.querySelector('form[method="post"]').addEventListener('submit', function (e) {
+    const priceInputs = document.querySelectorAll('.js-price-input');
+    const courierInput = document.querySelector('.js-courier-input');
+
+    let anyProductFilled = false;
+    priceInputs.forEach(function (inp) {
+        if (inp.value && inp.value.trim() !== '') {
+            anyProductFilled = true;
+        }
+    });
+
+    const courierFilled = courierInput && courierInput.value && courierInput.value.trim() !== '';
+
+    if (!anyProductFilled && !courierFilled) {
+        e.preventDefault();
+        alert('You haven\'t entered a new price for any product or the courier charge. Type a value in at least one "Request New Price" box (or Courier Charge) before submitting.');
+        return false;
+    }
+
+    if (!anyProductFilled && courierFilled) {
+        // Let them proceed, but make sure this was intentional
+        const proceed = confirm('No product prices were entered — only the courier charge will be submitted. Continue?');
+        if (!proceed) {
+            e.preventDefault();
+            return false;
+        }
+    }
+});
+</script>
 {% endblock %}

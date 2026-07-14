@@ -877,7 +877,8 @@ class ProformaPriceChangeRequest(models.Model):
     invoice = models.ForeignKey(
         ProformaInvoice,
         on_delete=models.CASCADE,
-        related_name="price_requests"
+        related_name="price_requests",
+        null=True, blank=True
     )
     quotation = models.ForeignKey(
         'QuotationMaker',
@@ -1034,6 +1035,7 @@ class ProformaPriceChangeRequest(models.Model):
             self.reviewed_at = timezone.now()
 
         super().save(*args, **kwargs)
+
     def save(self, *args, **kwargs):
         # Identify the parent (works for both Invoice and Quotation)
         parent = self.invoice or self.quotation
@@ -1077,10 +1079,46 @@ class ProformaPriceChangeRequest(models.Model):
             self.reviewed_at = timezone.now()
 
         super().save(*args, **kwargs)
-
     def __str__(self):
         req_type = "Product" if self.is_product_request else "Courier"
         return f"{req_type} Request #{self.id} (Inv: {self.invoice_id}) - MSRP Status: {self.is_under_msrp}"
+
+    # def __str__(self):
+    #     # Determine document type for display
+    #     doc_type = "PI" if self.invoice.is_converted_to_pi else "Quote"
+    #     req_type = "Product" if self.is_product_request else "Courier"
+    #     return f"{doc_type} {req_type} Request #{self.id} (Inv: {self.invoice_id}) - MSRP Status: {self.is_under_msrp}"
+    #
+    # # No changes to variable names, just updated logic inside the save method
+    # def save(self, *args, **kwargs):
+    #     # 1. HANDLE PRODUCT REQUEST LOGIC
+    #     if self.is_product_request:
+    #         self.requested_courier_charge = None
+    #         if self.quantity is None and self.product and self.invoice:
+    #             item = self.invoice.items.filter(product=self.product).first()
+    #             if item:
+    #                 self.quantity = item.quantity
+    #         if self.requested_price is not None and self.msrp_snapshot is not None:
+    #             self.is_under_msrp = self.requested_price < self.msrp_snapshot
+    #
+    #     # 2. HANDLE COURIER REQUEST LOGIC
+    #     else:
+    #         self.product = None
+    #         self.requested_price = None
+    #         self.msrp_snapshot = None
+    #         self.quantity = None
+    #         if not self.recommended_courier_charge and self.invoice:
+    #             curr_charge = self.invoice.courier_charge() if callable(
+    #                 self.invoice.courier_charge) else self.invoice.courier_charge
+    #             self.recommended_courier_charge = curr_charge
+    #         if self.requested_courier_charge is not None and self.recommended_courier_charge:
+    #             self.is_under_msrp = self.requested_courier_charge < (self.recommended_courier_charge / 2)
+    #
+    #     if self.status != "pending" and not self.reviewed_at:
+    #         self.reviewed_at = timezone.now()
+    #
+    #     super().save(*args, **kwargs)
+
 
 class ApprovedPriceMemory(models.Model):
     """
@@ -1104,10 +1142,7 @@ class ProformaStockShortageRequest(models.Model):
     """Handles requests where quantity ordered > warehouse stock."""
     STATUS_CHOICES = [("pending", "Pending Approval"), ("approved", "Stock Confirmed"), ("rejected", "Unavailable")]
 
-    invoice = models.ForeignKey(ProformaInvoice, on_delete=models.CASCADE, related_name="stock_requests")
-    product = models.ForeignKey(InventoryItem, on_delete=models.CASCADE,null=True,
-        blank=True
-    )
+    invoice = models.ForeignKey(ProformaInvoice, on_delete=models.CASCADE, related_name="stock_requests",null=True, blank=True)
     # Add the quotation field
     quotation = models.ForeignKey(
         'QuotationMaker',
@@ -1117,6 +1152,9 @@ class ProformaStockShortageRequest(models.Model):
         blank=True
     )
 
+    product = models.ForeignKey(InventoryItem, on_delete=models.CASCADE,null=True,
+        blank=True
+)
 
     requested_quantity = models.IntegerField(default=0)
     available_quantity = models.IntegerField(default=0)
@@ -1148,6 +1186,7 @@ class ProformaStockShortageRequest(models.Model):
     def __str__(self):
         p_name = self.product.name if self.product else "No Product/Courier"
         return f"{p_name} - Inv #{self.invoice.id}"
+
     def __str__(self):
         p_name = self.product.name if self.product else "No Product"
         parent_id = self.invoice.id if self.invoice else self.quotation.id
@@ -1163,7 +1202,7 @@ class ProformaStockShortageRequest(models.Model):
 
 class ProformaRemark(models.Model):
     # 1. Links
-    invoice = models.ForeignKey('ProformaInvoice', on_delete=models.CASCADE, related_name="remarks")
+    invoice = models.ForeignKey('ProformaInvoice', on_delete=models.CASCADE, related_name="remarks",null=True, blank=True)
     quotation = models.ForeignKey('QuotationMaker', on_delete=models.CASCADE, related_name="remarks", null=True, blank=True) #new
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
@@ -1217,6 +1256,7 @@ class CreditPeriodOverdueByPassRequest(models.Model):
 
     def __str__(self):
         return f"Request for PI #{self.proforma_invoice.id} - {self.status}"
+
 
 
 class QuotationMaker(models.Model):

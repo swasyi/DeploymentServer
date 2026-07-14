@@ -72,7 +72,7 @@
             <table class="table table-hover align-middle mb-0">
                 <thead>
                     <tr>
-                        <th class="ps-4">Invoice / Customer</th>
+                        <th class="ps-4">Source / Customer</th>
                         <th>Requested By</th>
                         <th>Shortage Details</th>
                         <th>Created At</th>
@@ -82,46 +82,57 @@
                     </tr>
                 </thead>
 <tbody>
-    {% regroup requests by invoice as grouped_requests %}
+    <!-- CHANGE 1: Regroup by parent_key (Property) instead of invoice field to avoid NULL groups -->
+    {% regroup requests by parent_key as grouped_requests %}
     {% for group in grouped_requests %}
-    <!-- 1. Trigger removed from TR tag -->
+    {% with first_item=group.list.0 %} <!-- Helper to access the first request in this group -->
+
     <tr class="bg-light shadow-sm">
-
         <td class="ps-4">
-            <span class="fw-bold text-primary">#{{ group.grouper.id }}</span><br>
-            <small class="text-muted">{{ group.list.0.invoice.customer.name }}</small>
+            <span class="fw-bold text-primary">
+                <!-- CHANGE 2: Logic to show ID based on whether it's PI or Quotation -->
+                {% if first_item.invoice %}#INV-{{ first_item.invoice.id }}{% else %}#QUO-{{ first_item.quotation.id }}{% endif %}
+            </span><br>
+            <small class="text-muted">
+                <!-- CHANGE 3: Logic to get Customer Name from the correct parent -->
+                {% if first_item.invoice %}{{ first_item.invoice.customer.name }}{% else %}{{ first_item.quotation.customer.name }}{% endif %}
+            </small>
         </td>
-        <td>{{ group.list.0.requested_by.username }}</td>
+        <td>{{ first_item.requested_by.username }}</td>
         <td><span class="badge bg-dark">{{ group.list|length }} Products</span></td>
-        <td>{{ group.list.0.created_at|date:"d M, H:i" }}</td>
+        <td>{{ first_item.created_at|date:"d M, H:i" }}</td>
 
-        <!-- 2. Toggle Trigger is now ONLY here -->
         <td>
             <button type="button" class="btn btn-sm btn-link text-primary fw-bold text-decoration-none p-0"
                     data-bs-toggle="collapse"
-                    data-bs-target="#invoice-{{ group.grouper.id }}"
-                    onclick="saveToggleState('{{ group.grouper.id }}')">
+                    data-bs-target="#group-{{ group.grouper }}"
+                    onclick="saveToggleState('{{ group.grouper }}')">
                 <i class="bi bi-eye-fill"></i> View Details
             </button>
         </td>
 
         <td>
+            <!-- CHANGE 4: Passing the correct ID to Remarks (whichever parent exists) -->
             <button type="button" class="btn btn-outline-info btn-remark py-1 px-3"
-                    onclick="openRemarkModal('{{ group.grouper.id }}')">
+                    onclick="openRemarkModal('{% if first_item.invoice %}{{ first_item.invoice.id }}{% else %}{{ first_item.quotation.id }}{% endif %}')">
                 💬 Remarks
             </button>
         </td>
         <td class="text-center pe-4">
-            <!-- 3. This Link will now open normally -->
-            <a href="{% url 'proforma_detail' group.grouper.id %}"
-               class="btn btn-sm btn-primary px-3 shadow-sm" target="_blank">
-               View PI →
-            </a>
+            <!-- CHANGE 5: Fixed the Crash. Link dynamically points to PI or Quotation detail view -->
+            {% if first_item.invoice %}
+                <a href="{% url 'proforma_detail' first_item.invoice.id %}"
+                   class="btn btn-sm btn-primary px-3 shadow-sm" target="_blank">View PI →</a>
+            {% else %}
+                <a href="{% url 'quotation_detail' first_item.quotation.id %}"
+                   class="btn btn-sm btn-info px-3 shadow-sm" target="_blank">View Quote →</a>
+            {% endif %}
         </td>
     </tr>
 
     <!-- Collapsible Child Row -->
-    <tr class="collapse" id="invoice-{{ group.grouper.id }}">
+    <!-- CHANGE 6: ID updated to match the grouper string (e.g. group-PI-1) -->
+    <tr class="collapse" id="group-{{ group.grouper }}">
         <td colspan="7" class="p-0 border-0">
             <div class="p-3 bg-white border-bottom shadow-sm" style="background-color: #fcfcfc !important;">
                 <table class="table table-sm table-bordered align-middle mb-0">
@@ -176,8 +187,10 @@
             </div>
         </td>
     </tr>
+    {% endwith %}
     {% endfor %}
 </tbody>
+
             </table>
         </div>
     </div>
@@ -290,6 +303,26 @@ document.addEventListener("DOMContentLoaded", function() {
         const modal = document.getElementById('globalRemarkModal');
         if (e.target == modal) closeRemarkModal();
     }
+    function saveToggleState(id) {
+    localStorage.setItem('openGroup', id); // Changed key to 'openGroup'
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    // CHANGE 7: Reopen logic now uses the parent_key string
+    const openId = localStorage.getItem('openGroup');
+    if (openId) {
+        const target = document.getElementById('group-' + openId);
+        if (target) {
+            new bootstrap.Collapse(target, { show: true });
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    window.onclick = function(e) {
+        const modal = document.getElementById('globalRemarkModal');
+        if (e.target == modal) closeRemarkModal();
+    }
+
 });
 </script>
 </body>

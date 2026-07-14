@@ -74,64 +74,34 @@ ProformaItemFormSet = modelformset_factory(
     can_delete=True
 )
 
+
+from django import forms
+from .models import ProformaPriceChangeRequest
+
+
 class ProformaPriceChangeRequestForm(forms.ModelForm):
-    """
-    Used by normal users to request a price change
-    for a Proforma Invoice.
-    """
-
-    class Meta:
-        model = ProformaPriceChangeRequest
-        fields = ["reason"]   # product + courier handled manually in view
-        widgets = {
-            "reason": forms.Textarea(attrs={
-                "rows": 3,
-                "class": "form-control",
-                "placeholder": "Explain why price or courier charge change is needed..."
-            }),
-        }
-
-    def __init__(self, *args, **kwargs):
-        self.invoice = kwargs.pop("invoice", None)
-        self.user = kwargs.pop("user", None)
-        super().__init__(*args, **kwargs)
-
-        # Optional: make reason required
-        self.fields["reason"].required = False
-class ProformaPriceChangeRequestForm(forms.ModelForm):
-    """
-    Used by users to request a price change for either a
-    Proforma Invoice or a Quotation.
-    """
-
     class Meta:
         model = ProformaPriceChangeRequest
         fields = ["reason", "invoice", "quotation"]
         widgets = {
             "reason": forms.Textarea(attrs={
                 "rows": 3,
-                "class": "form-control",
-                "placeholder": "Explain why price or courier charge change is needed..."
+                "class": "price-input",
+                "placeholder": "General explanation for Admin (Optional if row remarks provided)..."
             }),
-            # Hidden because these are determined by the URL/View, not user selection
             "invoice": forms.HiddenInput(),
             "quotation": forms.HiddenInput(),
         }
 
     def __init__(self, *args, **kwargs):
-        # Pop 'user' before super().__init__
+        # Pop custom arguments BEFORE calling super().__init__
+        self.invoice_obj = kwargs.pop("invoice", None)
         self.user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
 
-        # Make reason mandatory
-        self.fields["reason"].required = True
-
-        # invoice and quotation are handled by the view logic,
-        # so they shouldn't block form submission if empty in POST
-        if 'invoice' in self.fields:
-            self.fields['invoice'].required = False
-        if 'quotation' in self.fields:
-            self.fields['quotation'].required = False
+        # Make all fields optional to ensure form_valid is ALWAYS reached
+        for field in self.fields:
+            self.fields[field].required = False
 
 
 class NewProformaCustomerForm(forms.ModelForm):

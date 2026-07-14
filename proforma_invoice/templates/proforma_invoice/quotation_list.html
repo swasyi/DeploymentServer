@@ -241,7 +241,19 @@
 
                             {# ADDED: Price Change Request Button for Quotations #}
                             {% if not q.is_converted_to_proforma and not request.user.is_superuser %}
-                                <a href="{% url 'proforma_price_change_request_create' q.id %}?obj_type=Quotation" class="btn-pro-action btn-info-custom mt-1">✎ Request Price Change</a>
+                                {% if last_stock.status == 'pending' or last_price.status == 'pending' %}
+                                    {# This button is shown when either Stock or Price is currently under review #}
+                                    <button type="button" class="btn-pro-action btn-grey mt-1" disabled
+                                            onclick="alert('Cannot request changes while existing requests are pending review.');">
+                                        🔒 Request Locked
+                                    </button>
+                                {% else %}
+                                    {# This button only appears when no requests are pending #}
+                                    <a href="{% url 'proforma_price_change_request_create' q.id %}?obj_type=Quotation"
+                                       class="btn-pro-action btn-info-custom mt-1">
+                                       ✎ Request Price Change
+                                    </a>
+                                {% endif %}
                             {% endif %}
                         </td>
 

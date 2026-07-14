@@ -5780,3 +5780,68 @@ class QuotationRequestDetailsApiView(LoginRequiredMixin, View):
         return JsonResponse(data)
 
 # ------Add next remark view ----------
+
+from django.utils import timezone
+
+from django.shortcuts import get_object_or_404
+from django.http import JsonResponse
+from django.utils.timezone import localtime
+
+# -------make this correct------------
+class ManageInvoiceRemarkView(LoginRequiredMixin, View):
+
+    def get_object(self, pk, obj_type):
+        """Helper to get either Quotation or Proforma"""
+        if obj_type == "Quotation":
+            return get_object_or_404(QuotationMaker, id=pk)
+        return get_object_or_404(ProformaInvoice, id=pk)
+
+    def get(self, request, pk, *args, **kwargs):
+        """Used to load the chat history"""
+        obj_type = request.GET.get('obj_type')  # JS sends this as ?obj_type=...
+        obj = self.get_object(pk, obj_type)
+
+        # Fetch remarks linked to either quotation or invoice
+        remarks_qs = obj.remarks.all().order_by('created_at')
+
+        remarks_list = []
+        for r in remarks_qs:
+            # Determine role for CSS bubble classes (b-sales, b-accounts, b-admin)
+            role = "admin" if r.user.is_superuser else ("accounts" if r.user.is_accountant else "sales")
+
+            remarks_list.append({
+                'user': r.user.username,
+                'text': r.remark,
+                'role': role,
+                'time': localtime(r.created_at).strftime('%d %b, %H:%M')
+            })
+
+        return JsonResponse({'remarks': remarks_list})
+
+    def post(self, request, pk, *args, **kwargs):
+        obj_type = request.POST.get('obj_type')
+        text = request.POST.get('remark')
+
+        if not text:
+            return JsonResponse({'status': 'error', 'message': 'Empty remark'}, status=400)
+
+        obj = self.get_object(pk, obj_type)
+
+        from .models import ProformaRemark
+        # Create the remark and assign fields based on type
+        if obj_type == "Quotation":
+            new_remark = ProformaRemark.objects.create(
+                user=request.user,
+                remark=text,
+                quotation=obj,
+                invoice=None  # Explicitly None
+            )
+        else:
+            new_remark = ProformaRemark.objects.create(
+                user=request.user,
+                remark=text,
+                invoice=obj,
+                quotation=None
+            )
+
+        return JsonResponse({'status': 'ok'})

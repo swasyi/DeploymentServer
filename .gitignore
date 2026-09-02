@@ -201,3 +201,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local PyCharm settings
+.idea/
+
+# Local dispatch uploads
+dispatchs/

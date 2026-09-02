@@ -875,10 +875,11 @@ class ProformaPriceChangeRequest(models.Model):
     is_product_request = models.BooleanField(default=True)
 
     invoice = models.ForeignKey(
-        ProformaInvoice,
+        'ProformaInvoice',
         on_delete=models.CASCADE,
-        related_name="price_requests",
-        null=True, blank=True
+        null=True,
+        blank=True,
+        related_name="price_requests"
     )
     quotation = models.ForeignKey(
         'QuotationMaker',
@@ -915,7 +916,8 @@ class ProformaPriceChangeRequest(models.Model):
     msrp_snapshot = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     quantity = models.PositiveIntegerField(null=True, blank=True, help_text="Snapshot of quantity at time of request")
 
-    # -------For courier-------
+
+# -------For courier-------
     requested_courier_charge = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     recommended_courier_charge = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
@@ -982,143 +984,55 @@ class ProformaPriceChangeRequest(models.Model):
         if not self.invoice and not self.quotation:
             raise ValidationError("A price request must be linked to either an Invoice or a Quotation.")
 
-    def save(self, *args, **kwargs):
-        # 1. Logic for Product Requests
-        if self.is_product_request:
-            # Clear courier fields to ensure data integrity
-            self.requested_courier_charge = None
 
-            # Auto-calculate MSRP status
-            if self.requested_price and self.msrp_snapshot:
-                self.is_under_msrp = self.requested_price < self.msrp_snapshot
 
-        # 2. Logic for Courier Requests
-        else:
-            # Clear product fields
-            self.product = None
-            self.requested_price = None
-            self.msrp_snapshot = None
-            self.is_under_msrp = False
-
-        super().save(*args, **kwargs)
-
-    def save(self, *args, **kwargs):
-        # 1. HANDLE PRODUCT REQUEST LOGIC
-        if self.is_product_request:
-            self.requested_courier_charge = None
-            # Snapshot quantity if missing
-            if self.quantity is None and self.product and self.invoice:
-                item = self.invoice.items.filter(product=self.product).first()
-                if item:
-                    self.quantity = item.quantity
-            # Check MSRP violation
-            if self.requested_price is not None and self.msrp_snapshot is not None:
-                self.is_under_msrp = self.requested_price < self.msrp_snapshot
-
-        # 2. HANDLE COURIER REQUEST LOGIC
-        else:
-            self.product = None
-            self.requested_price = None
-            self.msrp_snapshot = None
-            self.quantity = None
-            # Fetch default system charge if missing
-            if not self.recommended_courier_charge and self.invoice:
-                curr_charge = self.invoice.courier_charge() if callable(
-                    self.invoice.courier_charge) else self.invoice.courier_charge
-                self.recommended_courier_charge = curr_charge
-            # Deep discount rule (Courier < 50% of recommended)
-            if self.requested_courier_charge is not None and self.recommended_courier_charge:
-                self.is_under_msrp = self.requested_courier_charge < (self.recommended_courier_charge / 2)
-
-        # 3. TRACKING LOGIC (Set reviewed_at when status changes from pending)
-        if self.status != "pending" and not self.reviewed_at:
-            self.reviewed_at = timezone.now()
-
-        super().save(*args, **kwargs)
-
-    def save(self, *args, **kwargs):
-        # Identify the parent (works for both Invoice and Quotation)
-        parent = self.invoice or self.quotation
-
-        # 1. HANDLE PRODUCT REQUEST LOGIC
-        if self.is_product_request:
-            self.requested_courier_charge = None
-
-            # Snapshot quantity from either Invoice items or Quotation items
-            if self.quantity is None and self.product and parent:
-                item = parent.items.filter(product=self.product).first()
-                if item:
-                    self.quantity = item.quantity
-
-            # Check MSRP violation
-            if self.requested_price is not None and self.msrp_snapshot is not None:
-                self.is_under_msrp = self.requested_price < self.msrp_snapshot
-
-        # 2. HANDLE COURIER REQUEST LOGIC
-        else:
-            self.product = None
-            self.requested_price = None
-            self.msrp_snapshot = None
-            self.quantity = None
-
-            # Fetch default system courier charge from either Invoice or Quotation
-            if not self.recommended_courier_charge and parent:
-                # Safely calls courier_charge() regardless of parent type
-                curr_charge = parent.courier_charge() if callable(parent.courier_charge) else parent.courier_charge
-                self.recommended_courier_charge = curr_charge
-
-            # Deep discount rule (Flag if requested Courier is < 50% of system recommended)
-            if self.requested_courier_charge is not None and self.recommended_courier_charge:
-                self.is_under_msrp = self.requested_courier_charge < (self.recommended_courier_charge / 2)
-            else:
-                self.is_under_msrp = False
-
-        # 3. TRACKING LOGIC (Set reviewed_at when status changes from pending)
-        if self.status != "pending" and not self.reviewed_at:
-            from django.utils import timezone
-            self.reviewed_at = timezone.now()
-
-        super().save(*args, **kwargs)
     def __str__(self):
         req_type = "Product" if self.is_product_request else "Courier"
         return f"{req_type} Request #{self.id} (Inv: {self.invoice_id}) - MSRP Status: {self.is_under_msrp}"
 
-    # def __str__(self):
-    #     # Determine document type for display
-    #     doc_type = "PI" if self.invoice.is_converted_to_pi else "Quote"
-    #     req_type = "Product" if self.is_product_request else "Courier"
-    #     return f"{doc_type} {req_type} Request #{self.id} (Inv: {self.invoice_id}) - MSRP Status: {self.is_under_msrp}"
-    #
-    # # No changes to variable names, just updated logic inside the save method
-    # def save(self, *args, **kwargs):
-    #     # 1. HANDLE PRODUCT REQUEST LOGIC
-    #     if self.is_product_request:
-    #         self.requested_courier_charge = None
-    #         if self.quantity is None and self.product and self.invoice:
-    #             item = self.invoice.items.filter(product=self.product).first()
-    #             if item:
-    #                 self.quantity = item.quantity
-    #         if self.requested_price is not None and self.msrp_snapshot is not None:
-    #             self.is_under_msrp = self.requested_price < self.msrp_snapshot
-    #
-    #     # 2. HANDLE COURIER REQUEST LOGIC
-    #     else:
-    #         self.product = None
-    #         self.requested_price = None
-    #         self.msrp_snapshot = None
-    #         self.quantity = None
-    #         if not self.recommended_courier_charge and self.invoice:
-    #             curr_charge = self.invoice.courier_charge() if callable(
-    #                 self.invoice.courier_charge) else self.invoice.courier_charge
-    #             self.recommended_courier_charge = curr_charge
-    #         if self.requested_courier_charge is not None and self.recommended_courier_charge:
-    #             self.is_under_msrp = self.requested_courier_charge < (self.recommended_courier_charge / 2)
-    #
-    #     if self.status != "pending" and not self.reviewed_at:
-    #         self.reviewed_at = timezone.now()
-    #
-    #     super().save(*args, **kwargs)
 
+
+
+    def save(self, *args, **kwargs):
+        # 1. HANDLE PRODUCT REQUESTS (Keep exactly as is)
+        if self.is_product_request:
+            self.requested_courier_charge = None
+
+            if self.quantity is None and self.product:
+                parent = self.invoice or self.quotation
+                if parent:
+                    item = parent.items.filter(product=self.product).first()
+                    if item: self.quantity = item.quantity
+
+            if self.requested_price is not None and self.msrp_snapshot is not None:
+                self.is_under_msrp = self.requested_price < self.msrp_snapshot
+
+        # 2. HANDLE COURIER REQUESTS (New Logic Added)
+        else:
+            self.product = None
+            self.requested_price = None
+            self.msrp_snapshot = None
+            self.quantity = None
+
+            # --- NEW COURIER LOGIC ---
+            # --- FETCH RECOMMENDED CHARGE AUTOMATICALLY ---
+
+            if not self.recommended_courier_charge:
+                parent = self.invoice or self.quotation
+                if parent:
+                    # This calls the courier_charge() method you defined in ProformaInvoice/QuotationMaker
+                    current_system_charge = parent.courier_charge()
+                    self.recommended_courier_charge = current_system_charge
+
+
+            if self.requested_courier_charge is not None and self.recommended_courier_charge is not None:
+                # Flag for Admin Review if requested charge is less than 50% of original
+                half_price = self.recommended_courier_charge / 2
+                self.is_under_msrp = self.requested_courier_charge < half_price
+            else:
+                self.is_under_msrp = False
+
+        super().save(*args, **kwargs)
 
 class ApprovedPriceMemory(models.Model):
     """
@@ -1142,16 +1056,7 @@ class ProformaStockShortageRequest(models.Model):
     """Handles requests where quantity ordered > warehouse stock."""
     STATUS_CHOICES = [("pending", "Pending Approval"), ("approved", "Stock Confirmed"), ("rejected", "Unavailable")]
 
-    invoice = models.ForeignKey(ProformaInvoice, on_delete=models.CASCADE, related_name="stock_requests",null=True, blank=True)
-    # Add the quotation field
-    quotation = models.ForeignKey(
-        'QuotationMaker',
-        on_delete=models.CASCADE,
-        related_name="stock_requests",
-        null=True,
-        blank=True
-    )
-
+    invoice = models.ForeignKey(ProformaInvoice, on_delete=models.CASCADE, related_name="stock_requests")
     product = models.ForeignKey(InventoryItem, on_delete=models.CASCADE,null=True,
         blank=True
 )
@@ -1187,22 +1092,10 @@ class ProformaStockShortageRequest(models.Model):
         p_name = self.product.name if self.product else "No Product/Courier"
         return f"{p_name} - Inv #{self.invoice.id}"
 
-    def __str__(self):
-        p_name = self.product.name if self.product else "No Product"
-        parent_id = self.invoice.id if self.invoice else self.quotation.id
-        parent_type = "Inv" if self.invoice else "Quo"
-        return f"{p_name} - {parent_type} #{parent_id}"
-    @property
-    def parent_key(self):
-        """Generates a unique identifier for grouping in dashboards."""
-        if self.invoice:
-            return f"PI-{self.invoice.id}"
-        return f"QUO-{self.quotation.id}"
-
-
 class ProformaRemark(models.Model):
     # 1. Links
-    invoice = models.ForeignKey('ProformaInvoice', on_delete=models.CASCADE, related_name="remarks",null=True, blank=True)
+    invoice = models.ForeignKey('ProformaInvoice', on_delete=models.CASCADE, related_name="remarks",null=True,blank=True   # <--- Add this
+)
     quotation = models.ForeignKey('QuotationMaker', on_delete=models.CASCADE, related_name="remarks", null=True, blank=True) #new
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
@@ -1256,6 +1149,7 @@ class CreditPeriodOverdueByPassRequest(models.Model):
 
     def __str__(self):
         return f"Request for PI #{self.proforma_invoice.id} - {self.status}"
+
 
 
 
@@ -1399,10 +1293,6 @@ class QuotationMaker(models.Model):
     def is_fully_reviewed(self):
         """Returns True if all requests are either Approved or Rejected (or if no requests exist)"""
         return not self.has_pending_price_requests
-    # In your QuotationMaker model
-    @property
-    def has_pending_stock(self):
-        return self.stock_requests.filter(status='pending').exists()
 
 
 class QuotationMakerItem(models.Model):
@@ -1460,6 +1350,35 @@ class QuotationMakerItem(models.Model):
             if tier: unit_price = tier.unit_price
         return unit_price
 
+    # proforma_invoice/models.py
+
+    def get_unit_price_incl_tax(self):
+        # 1. If a manual request was already made for THIS document, use it
+        if self.requested_price and self.requested_price > 0:
+            return self.requested_price
+
+        # 2. NEW: Check Approved Price Memory for this Customer + Product
+        from .models import ApprovedPriceMemory
+        memory = ApprovedPriceMemory.objects.filter(
+            customer=self.quotation.customer,
+            product=self.product
+        ).first()
+
+        if memory:
+            # Check if the master price hasn't changed since approval
+            price_obj = getattr(self.product, "proforma_price", None)
+            if price_obj and memory.base_price_at_approval == price_obj.price:
+                return memory.min_approved_price
+
+        # 3. Fallback to Product Master Price Logic
+        price_obj = getattr(self.product, "proforma_price", None)
+        if not price_obj: return Decimal("0.00")
+
+        unit_price = price_obj.price
+        if price_obj.has_dynamic_price:
+            tier = price_obj.price_tiers.filter(min_quantity__lte=self.quantity).order_by("-min_quantity").first()
+            if tier: unit_price = tier.unit_price
+        return unit_price
     def total_price(self):
         return self.get_unit_price_incl_tax() * self.quantity
 
@@ -1480,3 +1399,224 @@ class QuotationMakerItem(models.Model):
 
     def __str__(self):
         return f"{self.product.name} x {self.quantity}"
+
+
+# new dispatch models
+
+class ShipmentMethod(models.Model):
+
+    name = models.CharField(max_length=100)
+
+    tracking_url = models.URLField()
+
+    is_active = models.BooleanField(default=True)
+
+
+
+class DispatchRequest(models.Model):
+
+    STATUS_CHOICES = [
+
+        # Salesperson created dispatch request
+        ("requested", "Requested"),
+
+        # Accounts entered invoice number, shipment method
+        # and notified warehouse
+        ("waiting_for_packing", "Waiting For Packing"),
+
+        # Warehouse uploaded packed product photos
+        # waiting for accounts review
+        ("packed_awaiting_approval", "Packed - Awaiting Approval"),
+
+        # Accounts approved packing photos
+        # warehouse can now dispatch
+        ("packing_approved", "Packing Approved"),
+
+        # Warehouse dispatched goods and entered docket no.
+        ("dispatched_by_warehouse", "Dispatched By Warehouse"),
+
+        # Accounts performed final verification
+        ("completed", "Completed"),
+
+        # Failure states
+        ("packing_rejected", "Packing Rejected"),
+        ("cancelled", "Cancelled"),
+    ]
+
+    invoice = models.OneToOneField(
+        ProformaInvoice,
+        on_delete=models.CASCADE,
+        related_name="dispatch_request"
+    )
+
+    shipment_method = models.ForeignKey(
+        ShipmentMethod,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True
+    )
+
+    invoice_number = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True
+    )
+
+    status = models.CharField(
+        max_length=50,
+        choices=STATUS_CHOICES,
+        default="requested"
+    )
+
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+def dispatch_upload_path(instance, filename):
+
+    invoice_id = instance.dispatch_request.invoice.id
+
+    return (
+        f"dispatchs/"
+        f"{timezone.now().year}/"
+        f"{timezone.now().month}/"
+        f"invoice_{invoice_id}/"
+        f"{filename}"
+    )
+class DispatchPhoto(models.Model):
+
+    dispatch_request = models.ForeignKey(
+        DispatchRequest,
+        related_name="photos",
+        on_delete=models.CASCADE
+    )
+
+    image = models.ImageField(
+        upload_to=dispatch_upload_path
+    )
+
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True
+    )
+
+    uploaded_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+class WarehouseDispatch(models.Model):
+
+    dispatch_request = models.OneToOneField(
+        DispatchRequest,
+        on_delete=models.CASCADE
+    )
+
+    docket_number = models.CharField(
+        max_length=100
+    )
+
+    dispatched_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+
+    dispatched_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        on_delete=models.SET_NULL
+    )
+
+class DispatchRemark(models.Model):
+
+    dispatch_request = models.ForeignKey(
+        DispatchRequest,
+        related_name="remarks",
+        on_delete=models.CASCADE
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True
+    )
+
+    message = models.TextField()
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    class Meta:
+        ordering = ["created_at"]
+
+class DispatchStateHistory(models.Model):
+
+    dispatch_request = models.ForeignKey(
+        DispatchRequest,
+        related_name="history",
+        on_delete=models.CASCADE
+    )
+
+    from_status = models.CharField(
+        max_length=50,
+        blank=True
+    )
+
+    to_status = models.CharField(
+        max_length=50
+    )
+
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        on_delete=models.SET_NULL
+    )
+
+    changed_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    class Meta:
+        ordering = ["changed_at"]
+
+def dispatch_invoice_upload_path(instance, filename):
+
+    invoice_id = instance.dispatch_request.invoice.id
+
+    return (
+        f"dispatchs/"
+        f"{timezone.now().year}/"
+        f"{timezone.now().month}/"
+        f"invoice_{invoice_id}/"
+        f"invoices/"
+        f"{filename}"
+    )
+
+class DispatchInvoice(models.Model):
+
+    dispatch_request = models.OneToOneField(
+        DispatchRequest,
+        related_name="invoice_file",
+        on_delete=models.CASCADE
+    )
+
+    pdf = models.FileField(
+        upload_to=dispatch_invoice_upload_path
+    )
+
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        on_delete=models.SET_NULL
+    )
+
+    uploaded_at = models.DateTimeField(
+        auto_now_add=True
+    )

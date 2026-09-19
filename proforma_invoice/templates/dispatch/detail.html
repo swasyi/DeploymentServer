@@ -1217,129 +1217,159 @@
 <script>
 document.addEventListener("DOMContentLoaded", function () {
 
-    const input = document.getElementById("packingPhotos");
-    const selectedPhotos = document.getElementById("selectedPhotos");
-    const preview = document.getElementById("photoPreview");
-    const submitBtn = document.getElementById("submitPackingBtn");
+    // =========================================================
+    // PACKING PHOTO PREVIEW
+    // =========================================================
+    const packingInput = document.getElementById("packingPhotos");
+    const selectedPackingPhotos = document.getElementById("selectedPhotos");
+    const packingPreview = document.getElementById("photoPreview");
+    const submitPackingBtn = document.getElementById("submitPackingBtn");
 
-    if (!input) return;
+    if (packingInput && selectedPackingPhotos && packingPreview) {
 
-    input.addEventListener("change", function () {
+        packingInput.addEventListener("change", function () {
+            packingPreview.innerHTML = "";
+            selectedPackingPhotos.style.color = "#4A6080";
 
-        preview.innerHTML = "";
+            if (!this.files || this.files.length === 0) {
+                selectedPackingPhotos.textContent = "No photos selected";
+                return;
+            }
 
-        if (!this.files || this.files.length === 0) {
-            selectedPhotos.textContent = "No photos selected";
-            return;
+            selectedPackingPhotos.textContent =
+                this.files.length +
+                " photo" +
+                (this.files.length > 1 ? "s" : "") +
+                " selected";
+
+            Array.from(this.files).forEach(function (file) {
+                if (!file.type.startsWith("image/")) {
+                    return;
+                }
+
+                const reader = new FileReader();
+
+                reader.onload = function (event) {
+                    const img = document.createElement("img");
+                    img.src = event.target.result;
+                    img.alt = "Packing photo preview";
+                    img.style.width = "90px";
+                    img.style.height = "90px";
+                    img.style.objectFit = "cover";
+                    img.style.borderRadius = "8px";
+                    img.style.border = "1px solid #D4DFE9";
+                    packingPreview.appendChild(img);
+                };
+
+                reader.readAsDataURL(file);
+            });
+        });
+
+        // Packing submit validation / feedback
+        const packingForm = submitPackingBtn
+            ? submitPackingBtn.closest("form")
+            : null;
+
+        if (packingForm) {
+            packingForm.addEventListener("submit", function (event) {
+                if (!packingInput.files || packingInput.files.length === 0) {
+                    event.preventDefault();
+                    selectedPackingPhotos.textContent =
+                        "⚠️ Please select at least one packing photo.";
+                    selectedPackingPhotos.style.color = "#C0392B";
+                    return;
+                }
+
+                submitPackingBtn.disabled = true;
+                submitPackingBtn.innerHTML = "⏳ Submitting...";
+                submitPackingBtn.style.opacity = "0.7";
+                submitPackingBtn.style.cursor = "not-allowed";
+            });
         }
-
-        selectedPhotos.textContent =
-            this.files.length +
-            " photo" +
-            (this.files.length > 1 ? "s" : "") +
-            " selected";
-
-        Array.from(this.files).forEach(function (file) {
-
-            if (!file.type.startsWith("image/")) {
-                return;
-            }
-
-            const reader = new FileReader();
-
-            reader.onload = function (event) {
-
-                const img = document.createElement("img");
-
-                img.src = event.target.result;
-                img.style.width = "90px";
-                img.style.height = "90px";
-                img.style.objectFit = "cover";
-                img.style.borderRadius = "8px";
-                img.style.border = "1px solid #D4DFE9";
-
-                preview.appendChild(img);
-            };
-
-            reader.readAsDataURL(file);
-        });
-
-    });
-
-
-    // Submit button feedback
-    const form = submitBtn?.closest("form");
-
-    if (form) {
-        form.addEventListener("submit", function (event) {
-
-            if (!input.files || input.files.length === 0) {
-                event.preventDefault();
-
-                selectedPhotos.textContent =
-                    "⚠️ Please select at least one packing photo.";
-
-                selectedPhotos.style.color = "#C0392B";
-
-                return;
-            }
-
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = "⏳ Submitting...";
-            submitBtn.style.opacity = "0.7";
-            submitBtn.style.cursor = "not-allowed";
-        });
     }
-    document
-    .getElementById("docketPhotos")
-    ?.addEventListener("change", function () {
 
-        const files = this.files;
 
-        const selected =
-            document.getElementById(
-                "selectedDocketPhotos"
-            );
+    // =========================================================
+    // DOCKET PHOTO PREVIEW
+    // =========================================================
+    // IMPORTANT: Do not return early when packingInput is absent.
+    // The docket form exists only after packing is approved.
+    const docketInput = document.getElementById("docketPhotos");
+    const selectedDocketPhotos = document.getElementById("selectedDocketPhotos");
+    const docketPreview = document.getElementById("docketPhotoPreview");
 
-        const preview =
-            document.getElementById(
-                "docketPhotoPreview"
-            );
+    if (docketInput && selectedDocketPhotos && docketPreview) {
 
-        preview.innerHTML = "";
+        docketInput.addEventListener("change", function () {
+            docketPreview.innerHTML = "";
+            selectedDocketPhotos.style.color = "#6c757d";
 
-        if (!files.length) {
+            if (!this.files || this.files.length === 0) {
+                selectedDocketPhotos.textContent =
+                    "No docket photos selected";
+                return;
+            }
 
-            selected.textContent =
-                "No docket photos selected";
+            selectedDocketPhotos.textContent =
+                this.files.length +
+                " docket photo" +
+                (this.files.length > 1 ? "s" : "") +
+                " selected";
 
-            return;
-        }
+            Array.from(this.files).forEach(function (file) {
 
-        selected.textContent =
-            files.length +
-            " docket photo(s) selected";
+                if (!file.type.startsWith("image/")) {
+                    return;
+                }
 
-        Array.from(files).forEach(function (file) {
+                const reader = new FileReader();
 
-            const reader =
-                new FileReader();
+                reader.onload = function (event) {
+                    const wrapper = document.createElement("div");
+                    wrapper.style.display = "flex";
+                    wrapper.style.flexDirection = "column";
+                    wrapper.style.gap = "5px";
+                    wrapper.style.width = "100px";
 
-            reader.onload = function (e) {
+                    const img = document.createElement("img");
+                    img.src = event.target.result;
+                    img.alt = "Docket photo preview";
+                    img.style.width = "90px";
+                    img.style.height = "90px";
+                    img.style.objectFit = "cover";
+                    img.style.borderRadius = "8px";
+                    img.style.border = "1px solid #D4DFE9";
 
-                const img =
-                    document.createElement("img");
+                    const name = document.createElement("div");
+                    name.textContent = file.name;
+                    name.style.fontSize = "11px";
+                    name.style.color = "#4A6080";
+                    name.style.wordBreak = "break-word";
 
-                img.src = e.target.result;
+                    wrapper.appendChild(img);
+                    wrapper.appendChild(name);
+                    docketPreview.appendChild(wrapper);
+                };
 
-                preview.appendChild(img);
-            };
-
-            reader.readAsDataURL(file);
-
+                reader.readAsDataURL(file);
+            });
         });
 
-    });
+        // Docket submit validation / feedback
+        const docketForm = docketInput.closest("form");
+
+        if (docketForm) {
+            docketForm.addEventListener("submit", function (event) {
+                if (!docketInput.files || docketInput.files.length === 0) {
+                    event.preventDefault();
+                    selectedDocketPhotos.textContent =
+                        "⚠️ Please select at least one docket photo.";
+                    selectedDocketPhotos.style.color = "#C0392B";
+                    return;
+                }
+            });
+        }
+    }
 
 });
 </script>

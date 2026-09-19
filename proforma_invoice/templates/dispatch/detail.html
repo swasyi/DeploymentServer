@@ -309,6 +309,53 @@
     border-top: 1px solid var(--border);
     margin: 20px 0;
   }
+  .dp-photo-upload {
+    margin-top: 8px;
+  }
+
+.dp-hidden-file-input {
+    display: none;
+}
+
+.dp-upload-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 18px;
+    border-radius: 10px;
+    background: #198754;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.dp-upload-btn:hover {
+    background: #157347;
+    transform: translateY(-1px);
+}
+
+.dp-selected-photos {
+    margin-top: 10px;
+    font-size: 13px;
+    color: #6c757d;
+}
+
+.dp-photo-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.dp-photo-preview img {
+    width: 90px;
+    height: 90px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+}
 
   /* ── REVIEW SECTION ──────────────────────────── */
   .dp-review-note {
@@ -634,39 +681,89 @@
   {% endif %}
 
   {% if dispatch.status == "waiting_for_packing" and is_warehouse %}
-  <div class="dp-card dp-card--info">
-    <div class="dp-card__header">
-      <div class="dp-card__header-icon dp-card__header-icon--cyan">📦</div>
-      <div>
-        <div class="dp-card__title">Warehouse Packing</div>
-        <div class="dp-card__subtitle">Upload packing photos and any notes before submitting</div>
-      </div>
-    </div>
-    <div class="dp-card__body">
-      <form method="post" enctype="multipart/form-data" action="{% url 'warehouse_submit_packing' dispatch.id %}">
-        {% csrf_token %}
-        <div class="dp-form">
+    <div class="dp-card dp-card--info">
 
-          <div class="dp-field">
-            <label class="dp-label">Packing Photos <span>*</span></label>
-            <input type="file" name="photos" multiple class="dp-input dp-file-input" required>
-          </div>
-
-          <div class="dp-field">
-            <label class="dp-label">Remarks</label>
-            <textarea name="remark" class="dp-textarea" placeholder="Add any packing notes or observations…"></textarea>
-          </div>
-
-          <div class="dp-form-actions">
-            <button type="submit" class="dp-btn dp-btn--success">
-              ✅ Submit Packing
-            </button>
-          </div>
-
+        <div class="dp-card__header">
+            <div class="dp-card__header-icon dp-card__header-icon--cyan">📦</div>
+            <div>
+                <div class="dp-card__title">Warehouse Packing</div>
+                <div class="dp-card__subtitle">
+                    Upload packing photos and any notes before submitting
+                </div>
+            </div>
         </div>
-      </form>
+
+        <div class="dp-card__body">
+
+            <form method="post"
+                  enctype="multipart/form-data"
+                  action="{% url 'warehouse_submit_packing' dispatch.id %}">
+
+                {% csrf_token %}
+
+                <div class="dp-form">
+
+                    <!-- PHOTO UPLOAD -->
+                    <div class="dp-field">
+                        <label class="dp-label">
+                            Packing Photos <span>*</span>
+                        </label>
+                        <input
+                            type="file"
+                            id="packingPhotos"
+                            name="photos"
+                            multiple
+                            accept="image/*"
+\                            style="display: none;"
+                        >
+                        <button
+                            type="button"
+                            class="dp-btn dp-btn--primary"
+                            onclick="document.getElementById('packingPhotos').click();"
+                        >
+                            📷 Upload Photos
+                        </button>
+                        <div id="selectedPhotos"
+                             style="margin-top:10px; font-size:13px; color:#4A6080;">
+                            No photos selected
+                        </div>
+                        <div id="photoPreview"
+                             style="
+                                display:flex;
+                                flex-wrap:wrap;
+                                gap:10px;
+                                margin-top:12px;
+                             ">
+                        </div>
+                    </div>
+                    <!-- REMARK -->
+                    <div class="dp-field">
+
+                        <label class="dp-label">
+                            Remarks
+                        </label>
+
+                        <textarea
+                            name="remark"
+                            class="dp-textarea"
+                            placeholder="Add any packing notes or observations…"
+                        ></textarea>
+                    </div>
+                    <!-- SUBMIT -->
+                    <div class="dp-form-actions">
+
+                        <button
+                            type="submit"
+                            id="submitPackingBtn"
+                            class="dp-btn dp-btn--success"
+                        >
+                            ✅ Submit Packing
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
     </div>
-  </div>
   {% endif %}
 
   {% if dispatch.status == "packed_awaiting_approval" and is_accountant %}
@@ -930,4 +1027,83 @@
 </div>
 </div>
 
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const input = document.getElementById("packingPhotos");
+    const selectedPhotos = document.getElementById("selectedPhotos");
+    const preview = document.getElementById("photoPreview");
+    const submitBtn = document.getElementById("submitPackingBtn");
+
+    if (!input) return;
+
+    input.addEventListener("change", function () {
+
+        preview.innerHTML = "";
+
+        if (!this.files || this.files.length === 0) {
+            selectedPhotos.textContent = "No photos selected";
+            return;
+        }
+
+        selectedPhotos.textContent =
+            this.files.length +
+            " photo" +
+            (this.files.length > 1 ? "s" : "") +
+            " selected";
+
+        Array.from(this.files).forEach(function (file) {
+
+            if (!file.type.startsWith("image/")) {
+                return;
+            }
+
+            const reader = new FileReader();
+
+            reader.onload = function (event) {
+
+                const img = document.createElement("img");
+
+                img.src = event.target.result;
+                img.style.width = "90px";
+                img.style.height = "90px";
+                img.style.objectFit = "cover";
+                img.style.borderRadius = "8px";
+                img.style.border = "1px solid #D4DFE9";
+
+                preview.appendChild(img);
+            };
+
+            reader.readAsDataURL(file);
+        });
+
+    });
+
+
+    // Submit button feedback
+    const form = submitBtn?.closest("form");
+
+    if (form) {
+        form.addEventListener("submit", function (event) {
+
+            if (!input.files || input.files.length === 0) {
+                event.preventDefault();
+
+                selectedPhotos.textContent =
+                    "⚠️ Please select at least one packing photo.";
+
+                selectedPhotos.style.color = "#C0392B";
+
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = "⏳ Submitting...";
+            submitBtn.style.opacity = "0.7";
+            submitBtn.style.cursor = "not-allowed";
+        });
+    }
+
+});
+</script>
 {% endblock %}

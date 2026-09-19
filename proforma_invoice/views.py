@@ -1,9 +1,23 @@
 from django.shortcuts import render, redirect
 from django.views import View
 from django.contrib.auth.mixins import LoginRequiredMixin
-from .models import ProformaInvoice, ProformaInvoiceItem, ProformaPriceChangeRequest, ProformaStockShortageRequest, \
-    ProformaRemark, CourierMode, CourierCharge, QuotationMakerItem, DispatchRequest, ShipmentMethod, DispatchInvoice, \
-    DispatchStateHistory, DispatchPhoto
+from .models import (
+    ProformaInvoice,
+    ProformaInvoiceItem,
+    ProformaPriceChangeRequest,
+    ProformaStockShortageRequest,
+    ProformaRemark,
+    CourierMode,
+    CourierCharge,
+    QuotationMakerItem,
+    DispatchRequest,
+    ShipmentMethod,
+    DispatchInvoice,
+    DispatchRemark,
+    DispatchStateHistory,
+    DispatchPhoto,
+    WarehouseDispatch,
+)
 from .models import ApprovedPriceMemory, ProformaPriceChangeRequest, CreditPeriodOverdueByPassRequest # Ensure these are imported
 
 from .forms import ProformaInvoiceForm, ProformaItemFormSet, ProformaPriceChangeRequestForm,NewProformaCustomerForm
@@ -5933,9 +5947,9 @@ class DispatchDetailView(LoginRequiredMixin,TemplateView):
         )
         context["is_accountant"] = getattr(self.request.user, 'is_accountant', False) or self.request.user.is_superuser
 
-
-        context["is_warehouse"] = getattr(self.request.user, 'is_warehouse', False)
-
+        context["is_warehouse"] = (
+                self.request.user.username.lower() == "warehouse"
+        )
         return context
 
 

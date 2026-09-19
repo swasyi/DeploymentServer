@@ -1533,6 +1533,33 @@ class WarehouseDispatch(models.Model):
         on_delete=models.SET_NULL
     )
 
+def docket_upload_path(instance, filename):
+    invoice_id = instance.warehouse_dispatch.dispatch_request.invoice.id
+
+    return (
+        f"dispatchs/"
+        f"{timezone.now().year}/"
+        f"{timezone.now().month}/"
+        f"invoice_{invoice_id}/"
+        f"docket/"
+        f"{filename}"
+    )
+
+
+class DocketPhoto(models.Model):
+    warehouse_dispatch = models.ForeignKey(
+        WarehouseDispatch,
+        related_name="photos",
+        on_delete=models.CASCADE
+    )
+    image = models.ImageField(upload_to=docket_upload_path)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
 class DispatchRemark(models.Model):
 
     dispatch_request = models.ForeignKey(
@@ -1558,19 +1585,33 @@ class DispatchRemark(models.Model):
 
 class DispatchStateHistory(models.Model):
 
+    EVENT_CHOICES = [
+        ("status", "Status Change"),
+        ("docket", "Docket Change"),
+    ]
+
     dispatch_request = models.ForeignKey(
         DispatchRequest,
         related_name="history",
         on_delete=models.CASCADE
     )
 
+    event_type = models.CharField(
+        max_length=20,
+        choices=EVENT_CHOICES,
+        default="status"
+    )
+
     from_status = models.CharField(
-        max_length=50,
-        blank=True
+        max_length=100,
+        blank=True,
+        null=True
     )
 
     to_status = models.CharField(
-        max_length=50
+        max_length=100,
+        blank=True,
+        null=True
     )
 
     changed_by = models.ForeignKey(

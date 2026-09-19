@@ -5942,15 +5942,15 @@ class DispatchDetailView(LoginRequiredMixin,TemplateView):
             context["warehouse_dispatch"] = None
 
             # Docket photos
-            if context["warehouse_dispatch"]:
-                context["docket_photos"] = (
-                    context["warehouse_dispatch"]
-                    .docket_photos
-                    .all()
-                    .order_by("-uploaded_at")
-                )
-            else:
-                context["docket_photos"] = []
+        if context["warehouse_dispatch"]:
+            context["docket_photos"] = (
+                context["warehouse_dispatch"]
+                .docket_photos
+                .all()
+                .order_by("-uploaded_at")
+            )
+        else:
+            context["docket_photos"] = []
 
         context["shipment_methods"] = (
             ShipmentMethod.objects

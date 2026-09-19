@@ -5944,9 +5944,10 @@ class DispatchDetailView(LoginRequiredMixin,TemplateView):
         # Docket photos
         if context["warehouse_dispatch"]:
             context["docket_photos"] = (
-                context["warehouse_dispatch"]
-                .docketphoto_set
-                .all()
+                DocketPhoto.objects
+                .filter(
+                    warehouse_dispatch=context["warehouse_dispatch"]
+                )
                 .order_by("-uploaded_at")
             )
         else:

@@ -5941,11 +5941,11 @@ class DispatchDetailView(LoginRequiredMixin,TemplateView):
         except:
             context["warehouse_dispatch"] = None
 
-            # Docket photos
+        # Docket photos
         if context["warehouse_dispatch"]:
             context["docket_photos"] = (
                 context["warehouse_dispatch"]
-                .docket_photos
+                .docketphoto_set
                 .all()
                 .order_by("-uploaded_at")
             )

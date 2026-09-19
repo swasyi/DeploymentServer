@@ -817,21 +817,116 @@
         <div class="dp-card__subtitle">Enter the carrier docket number to mark this order as dispatched</div>
       </div>
     </div>
-    <div class="dp-card__body">
-      <form method="post" action="{% url 'warehouse_dispatch' dispatch.id %}">
-        {% csrf_token %}
-        <div class="dp-form">
-          <div class="dp-field">
-            <label class="dp-label">Docket Number <span>*</span></label>
-            <input type="text" name="docket_number" class="dp-input dp-input--mono" placeholder="e.g. DOC-2024-00123" required>
-          </div>
-          <div class="dp-form-actions">
-            <button type="submit" class="dp-btn dp-btn--primary">🚚 Mark as Dispatched</button>
-          </div>
+    {% if dispatch.status == "packing_approved" and is_warehouse %}
+
+    <div class="dp-card dp-card--success">
+
+        <div class="dp-card__header">
+
+            <div class="dp-card__header-icon dp-card__header-icon--green">
+                🚚
+            </div>
+
+            <div>
+                <div class="dp-card__title">
+                    Dispatch Details
+                </div>
+
+                <div class="dp-card__subtitle">
+                    Enter the docket number and upload the docket proof.
+                </div>
+            </div>
+
         </div>
-      </form>
+
+        <div class="dp-card__body">
+
+            <form
+                method="post"
+                enctype="multipart/form-data"
+                action="{% url 'warehouse_dispatch' dispatch.id %}"
+                class="dp-form"
+            >
+
+                {% csrf_token %}
+
+                <!-- Docket Number -->
+
+                <div class="dp-field">
+
+                    <label class="dp-label">
+                        Docket Number <span>*</span>
+                    </label>
+
+                    <input
+                        type="text"
+                        name="docket_number"
+                        class="dp-input dp-input--mono"
+                        placeholder="Enter docket number"
+                        required
+                    >
+
+                </div>
+
+
+                <!-- Docket Photo -->
+
+                <div class="dp-field">
+
+                    <label class="dp-label">
+                        Docket Photo <span>*</span>
+                    </label>
+
+                    <input
+                        type="file"
+                        id="docketPhotos"
+                        name="docket_photos"
+                        multiple
+                        accept="image/*"
+                        required
+                        class="dp-hidden-file-input"
+                    >
+
+                    <label
+                        for="docketPhotos"
+                        class="dp-upload-btn"
+                    >
+                        📷 Upload Docket Photo
+                    </label>
+
+                    <div
+                        id="selectedDocketPhotos"
+                        class="dp-selected-photos"
+                    >
+                        No docket photos selected
+                    </div>
+
+                    <div
+                        id="docketPhotoPreview"
+                        class="dp-photo-preview"
+                    ></div>
+
+                </div>
+
+
+                <div class="dp-form-actions">
+
+                    <button
+                        type="submit"
+                        class="dp-btn dp-btn--success"
+                    >
+                        🚚 Submit Docket & Dispatch
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
     </div>
-  </div>
+
+    {% endif %}
   {% endif %}
 
   {% if dispatch.status == "dispatched_by_warehouse" and is_accountant %}
@@ -849,7 +944,55 @@
           <div class="dp-detail-label">Docket Number</div>
           <div class="dp-detail-value dp-detail-value--mono">{{ warehouse_dispatch.docket_number }}</div>
         </div>
+        <div class="dp-detail-item">
+          <div class="dp-detail-label">Entered By</div>
+          <div class="dp-detail-value">{{ warehouse_dispatch.dispatched_by|default:"Unknown" }}</div>
+        </div>
+        {% if warehouse_dispatch.dispatched_at %}
+        <div class="dp-detail-item dp-detail-item--full">
+          <div class="dp-detail-label">Entered At</div>
+          <div class="dp-detail-value">{{ warehouse_dispatch.dispatched_at }}</div>
+        </div>
+        {% endif %}
       </div>
+
+      {% if docket_photos %}
+      <div style="margin-bottom:20px;">
+        <div class="dp-detail-label" style="margin-bottom:10px;">Docket Proof</div>
+        <div class="dp-photo-grid">
+          {% for photo in docket_photos %}
+          <div class="dp-photo-item">
+            <a href="{{ photo.image.url }}" target="_blank">
+              <img src="{{ photo.image.url }}" alt="Docket proof">
+            </a>
+            <div class="dp-photo-timestamp">
+              {{ photo.uploaded_by|default:"Unknown" }} · {{ photo.uploaded_at }}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <hr class="dp-divider">
+
+      <div class="dp-detail-label" style="margin-bottom:8px;">Correct Docket Number</div>
+      <form method="post" action="{% url 'edit_docket_number' dispatch.id %}" class="dp-form" style="margin-bottom:20px;">
+        {% csrf_token %}
+        <div class="dp-field">
+          <input
+            type="text"
+            name="docket_number"
+            value="{{ warehouse_dispatch.docket_number }}"
+            class="dp-input dp-input--mono"
+            required
+          >
+        </div>
+        <div class="dp-form-actions">
+          <button type="submit" class="dp-btn dp-btn--primary">✏️ Update Docket Number</button>
+        </div>
+      </form>
+
       <form method="post" action="{% url 'complete_dispatch' dispatch.id %}">
         {% csrf_token %}
         <button type="submit" class="dp-btn dp-btn--success">✅ Complete Dispatch</button>
@@ -950,6 +1093,41 @@
     </div>
   </div>
 
+  <!-- ── DOCKET PHOTOS ───────────────────────────────────────── -->
+  {% if warehouse_dispatch %}
+  <div class="dp-card">
+    <div class="dp-card__header">
+      <div class="dp-card__header-icon dp-card__header-icon--cyan">📦</div>
+      <div>
+        <div class="dp-card__title">Docket Photos</div>
+        <div class="dp-card__subtitle">Docket proof uploaded by Warehouse</div>
+      </div>
+    </div>
+    <div class="dp-card__body">
+      {% if docket_photos %}
+        <div class="dp-photo-grid">
+          {% for photo in docket_photos %}
+          <div class="dp-photo-item">
+            <a href="{{ photo.image.url }}" target="_blank">
+              <img src="{{ photo.image.url }}" alt="Docket photo">
+            </a>
+            <div class="dp-photo-timestamp">
+              Uploaded by: <strong>{{ photo.uploaded_by|default:"Unknown" }}</strong><br>
+              {{ photo.uploaded_at }}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="dp-invoice-empty">
+          <span>📦</span>
+          No docket photos uploaded yet.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
   <!-- ── REMARKS ─────────────────────────────────────────────── -->
   <div class="dp-card">
     <div class="dp-card__header">
@@ -988,7 +1166,7 @@
       <div class="dp-card__header-icon dp-card__header-icon--gray">🕐</div>
       <div>
         <div class="dp-card__title">Workflow History</div>
-        <div class="dp-card__subtitle">Audit trail of all status changes</div>
+        <div class="dp-card__subtitle">Audit trail of status and docket changes</div>
       </div>
     </div>
     <div class="dp-card__body" style="padding: 0;">
@@ -1005,9 +1183,18 @@
           {% for item in history %}
           <tr>
             <td>{{ item.changed_at }}</td>
-            <td><span class="dp-status-pill">{{ item.from_status }}</span></td>
-            <td><span class="dp-status-pill">{{ item.to_status }}</span></td>
-            <td>{{ item.changed_by }}</td>
+            {% if item.event_type == "docket" %}
+              <td><span class="dp-status-pill">Docket</span></td>
+              <td>
+                <span class="dp-status-pill">{{ item.from_status|default:"Not Set" }}</span>
+                →
+                <span class="dp-status-pill">{{ item.to_status }}</span>
+              </td>
+            {% else %}
+              <td><span class="dp-status-pill">{{ item.from_status|default:"—" }}</span></td>
+              <td><span class="dp-status-pill">{{ item.to_status }}</span></td>
+            {% endif %}
+            <td>{{ item.changed_by|default:"System" }}</td>
           </tr>
           {% empty %}
           <tr>
@@ -1103,6 +1290,56 @@ document.addEventListener("DOMContentLoaded", function () {
             submitBtn.style.cursor = "not-allowed";
         });
     }
+    document
+    .getElementById("docketPhotos")
+    ?.addEventListener("change", function () {
+
+        const files = this.files;
+
+        const selected =
+            document.getElementById(
+                "selectedDocketPhotos"
+            );
+
+        const preview =
+            document.getElementById(
+                "docketPhotoPreview"
+            );
+
+        preview.innerHTML = "";
+
+        if (!files.length) {
+
+            selected.textContent =
+                "No docket photos selected";
+
+            return;
+        }
+
+        selected.textContent =
+            files.length +
+            " docket photo(s) selected";
+
+        Array.from(files).forEach(function (file) {
+
+            const reader =
+                new FileReader();
+
+            reader.onload = function (e) {
+
+                const img =
+                    document.createElement("img");
+
+                img.src = e.target.result;
+
+                preview.appendChild(img);
+            };
+
+            reader.readAsDataURL(file);
+
+        });
+
+    });
 
 });
 </script>

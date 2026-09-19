@@ -17,6 +17,7 @@ from .models import (
     DispatchStateHistory,
     DispatchPhoto,
     WarehouseDispatch,
+    DocketPhoto
 )
 from .models import ApprovedPriceMemory, ProformaPriceChangeRequest, CreditPeriodOverdueByPassRequest # Ensure these are imported
 
@@ -5940,6 +5941,17 @@ class DispatchDetailView(LoginRequiredMixin,TemplateView):
         except:
             context["warehouse_dispatch"] = None
 
+            # Docket photos
+            if context["warehouse_dispatch"]:
+                context["docket_photos"] = (
+                    context["warehouse_dispatch"]
+                    .docket_photos
+                    .all()
+                    .order_by("-uploaded_at")
+                )
+            else:
+                context["docket_photos"] = []
+
         context["shipment_methods"] = (
             ShipmentMethod.objects
             .filter(is_active=True)
@@ -6384,13 +6396,9 @@ class RejectPackingView(
         )
 
 
-class WarehouseDispatchView(
-    LoginRequiredMixin,
-    View
-):
+class WarehouseDispatchView(LoginRequiredMixin, View):
 
     def post(self, request, pk):
-
         dispatch = get_object_or_404(
             DispatchRequest,
             pk=pk
@@ -6408,8 +6416,13 @@ class WarehouseDispatchView(
                 pk=dispatch.id
             )
 
-        docket_number = request.POST.get(
-            "docket_number"
+        docket_number = (
+            request.POST.get("docket_number", "")
+            .strip()
+        )
+
+        docket_photos = request.FILES.getlist(
+            "docket_photos"
         )
 
         if not docket_number:
@@ -6424,14 +6437,44 @@ class WarehouseDispatchView(
                 pk=dispatch.id
             )
 
-        WarehouseDispatch.objects.update_or_create(
-            dispatch_request=dispatch,
-            defaults={
-                "docket_number": docket_number,
-                "dispatched_at": timezone.now(),
-                "dispatched_by": request.user,
-            }
+        if not docket_photos:
+            messages.error(
+                request,
+                "Please upload at least one docket photo."
+            )
+
+            return redirect(
+                "dispatch_detail",
+                pk=dispatch.id
+            )
+
+        warehouse_dispatch, created = (
+            WarehouseDispatch.objects.update_or_create(
+                dispatch_request=dispatch,
+                defaults={
+                    "docket_number": docket_number,
+                    "dispatched_at": timezone.now(),
+                    "dispatched_by": request.user,
+                }
+            )
         )
+        DispatchStateHistory.objects.create(
+            dispatch_request=dispatch,
+            event_type="docket",
+            from_status="",
+            to_status=docket_number,
+            changed_by=request.user
+        )
+        # --------------------------------
+        # Save docket photos
+        # --------------------------------
+
+        for photo in docket_photos:
+            DocketPhoto.objects.create(
+                warehouse_dispatch=warehouse_dispatch,
+                image=photo,
+                uploaded_by=request.user
+            )
 
         old_status = dispatch.status
 
@@ -6440,6 +6483,7 @@ class WarehouseDispatchView(
 
         DispatchStateHistory.objects.create(
             dispatch_request=dispatch,
+            event_type="status",
             from_status=old_status,
             to_status="dispatched_by_warehouse",
             changed_by=request.user
@@ -6475,11 +6519,108 @@ class WarehouseDispatchView(
             pk=dispatch.id
         )
 
-class CompleteDispatchView(
+class EditDocketNumberView(
     LoginRequiredMixin,
     AccountantRequiredMixin,
     View
 ):
+
+    def post(self, request, pk):
+
+        dispatch = get_object_or_404(
+            DispatchRequest,
+            pk=pk
+        )
+
+        # Accounts can edit the docket
+        # after warehouse dispatch and before completion.
+        if dispatch.status != "dispatched_by_warehouse":
+
+            messages.error(
+                request,
+                "Docket cannot be edited in the current dispatch state."
+            )
+
+            return redirect(
+                "dispatch_detail",
+                pk=dispatch.id
+            )
+
+        warehouse_dispatch = get_object_or_404(
+            WarehouseDispatch,
+            dispatch_request=dispatch
+        )
+
+        new_docket_number = (
+            request.POST
+            .get("docket_number", "")
+            .strip()
+        )
+
+        if not new_docket_number:
+
+            messages.error(
+                request,
+                "Docket number cannot be empty."
+            )
+
+            return redirect(
+                "dispatch_detail",
+                pk=dispatch.id
+            )
+
+        old_docket_number = (
+            warehouse_dispatch.docket_number
+        )
+
+        # Nothing actually changed
+        if old_docket_number == new_docket_number:
+
+            messages.info(
+                request,
+                "Docket number is unchanged."
+            )
+
+            return redirect(
+                "dispatch_detail",
+                pk=dispatch.id
+            )
+
+        # --------------------------------
+        # Update docket
+        # --------------------------------
+
+        warehouse_dispatch.docket_number = (
+            new_docket_number
+        )
+
+        warehouse_dispatch.save(
+            update_fields=["docket_number"]
+        )
+
+        # --------------------------------
+        # Audit history
+        # --------------------------------
+
+        DispatchStateHistory.objects.create(
+            dispatch_request=dispatch,
+            event_type="docket",
+            from_status=old_docket_number,
+            to_status=new_docket_number,
+            changed_by=request.user
+        )
+
+        messages.success(
+            request,
+            "Docket number updated successfully."
+        )
+
+        return redirect(
+            "dispatch_detail",
+            pk=dispatch.id
+        )
+
+class CompleteDispatchView(LoginRequiredMixin,AccountantRequiredMixin,View):
 
     def post(self, request, pk):
 

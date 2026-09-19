@@ -112,6 +112,13 @@ urlpatterns = [
         views.WarehouseDispatchView.as_view(),
         name="warehouse_dispatch"
     ),
+
+    path(
+        "dispatch/<int:pk>/edit-docket/",
+        views.EditDocketNumberView.as_view(),
+        name="edit_docket_number"
+    ),
+
     path(
         "dispatch/<int:pk>/complete/",
         views.CompleteDispatchView.as_view(),
